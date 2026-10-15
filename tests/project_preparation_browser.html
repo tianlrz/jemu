@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Jemu project preparation</title>
+<h1>Project preparation integration</h1><pre id="result">Running…</pre><script>
+(async()=>{
+  const checks=[],assert=(ok,label)=>{if(!ok)throw Error(label);checks.push('PASS '+label);};
+  const app=document.createElement('iframe');app.style.cssText='width:100%;height:550px';document.body.append(app);
+  const load=()=>new Promise(resolve=>app.addEventListener('load',resolve,{once:true}));
+  const ready=()=>new Promise((resolve,reject)=>{
+    const started=Date.now(),timer=setInterval(()=>{
+      if(app.contentWindow.__prepAudit?.ready){clearInterval(timer);resolve();}
+      else if(Date.now()-started>20000){clearInterval(timer);reject(Error('app preparation timed out'));}
+    },50);
+  });
+  let loaded=load();app.src='/';await loaded;await ready();
+  let stats=await(await fetch('/__test/stats')).json();
+  const preview=app.contentDocument.querySelector('#frame'),audit=app.contentWindow.__prepAudit;
+  assert(audit.initialHidden&&audit.visibleSourceFrames===0,'source toolbar never visible while preparing');
+  assert(preview.classList.contains('jemu-ready'),'preview revealed after preparation');
+  assert(preview.contentDocument.querySelectorAll('[data-jemu-deck]>section').length===3,'all three pages available');
+  assert(stats.versions===2&&stats.normalized,'complete working HTML saved automatically on first open');
+  assert(stats.sourceBackupIntact&&stats.assetIntact,'exact original source and asset preserved');
+  assert(!stats.temporaryBase,'preview-only base excluded from saved HTML');
+  const preparations=stats.prepareRequests;
+  loaded=load();app.contentWindow.location.reload();await loaded;await ready();
+  stats=await(await fetch('/__test/stats')).json();
+  assert(stats.prepareRequests===preparations&&stats.versions===2,'reload creates no conversion or duplicate snapshot');
+  assert(app.contentWindow.__prepAudit.documentLoads===1,'reload loads stored working document once');
+  assert(app.contentWindow.__prepAudit.visibleSourceFrames===0,'reload has no source-toolbar flash');
+  document.querySelector('#result').textContent=checks.join('\n');document.documentElement.dataset.result='pass';
+})().catch(error=>{document.querySelector('#result').textContent='FAIL '+error.stack;document.documentElement.dataset.result='fail';});
+</script>

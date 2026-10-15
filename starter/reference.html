@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fudan Slides · 纯净内容模板</title>
+<style>
+:root{--brand:#660874;--accent:#9343b3;--wash:#eae5eb;--ink:#1a1a1a;--body:#3a3a3a;--muted:#727272;--paper:#fff;--font:"Noto Sans SC","Microsoft YaHei","微软雅黑",Arial,sans-serif}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:var(--font);color:var(--body)}
+.slide{background:var(--paper);color:var(--body);font-family:var(--font);overflow:hidden;padding:108px 120px 132px}
+h1,h2,h3,p{margin:0}h2{color:var(--brand);font-size:64px;line-height:1.25;font-weight:700}.subtitle{margin-top:20px;font-family:Arial,var(--font);font-size:28px;letter-spacing:.08em;color:var(--accent)}.header{padding-bottom:36px;border-bottom:2px solid var(--wash)}
+.logo{display:block;object-fit:contain}.cover{padding:0}.cover-logo{position:absolute;top:65px;left:calc(50% - 235px);width:470px;height:170px}.cover-band{position:absolute;left:0;right:0;top:300px;height:445px;background:var(--brand);padding:62px 145px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;color:white}.cover-band h1{font-size:92px;line-height:1.2;font-weight:700;max-width:1600px}.cover-band .en{font-size:33px;margin-top:38px;letter-spacing:.08em;color:rgba(255,255,255,.9)}.cover-meta{position:absolute;top:855px;left:0;right:0;display:flex;justify-content:center;gap:80px;font-size:30px}.cover-meta span{color:var(--brand);margin-right:12px}.cover-caption{position:absolute;bottom:65px;text-align:center;left:0;right:0;font-size:23px;letter-spacing:.13em;color:var(--muted)}
+.page-content{margin-top:64px}.lead{font-size:40px;line-height:1.65;color:var(--ink);max-width:1560px}.topic-list{margin-top:44px;display:grid;gap:28px}.topic-list article{display:grid;grid-template-columns:280px 1fr;gap:45px;align-items:start;padding:22px 0}.topic-list h3{font-size:34px;color:var(--brand);line-height:1.5}.topic-list p{font-size:34px;line-height:1.55;color:var(--body)}
+.columns{display:grid;grid-template-columns:1fr 1fr;gap:75px}.method{border-top:7px solid var(--accent);padding-top:24px}.method h3{font-size:46px;color:var(--brand);line-height:1.3;margin-bottom:28px}.method p{font-size:34px;line-height:1.45;margin-top:20px}.method .label{display:block;color:var(--muted);font-size:24px;margin-bottom:8px}.takeaway{margin-top:32px;background:var(--wash);color:var(--brand);padding:18px 34px;font-size:30px;line-height:1.5}
+.timeline{border-collapse:collapse;width:100%;font-size:30px;line-height:1.4}.timeline th{text-align:left;background:var(--brand);color:white;padding:20px 30px;font-weight:600}.timeline td{padding:18px 30px;border-bottom:2px solid var(--wash)}.timeline th:first-child,.timeline td:first-child{width:280px;color:var(--brand);font-weight:600}.timeline th:first-child{color:white}.timeline td:last-child{color:var(--muted)}
+.footer{position:absolute;left:120px;right:120px;bottom:50px;display:flex;justify-content:space-between;font-size:24px;color:var(--muted)}.slide:not(.cover)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:10px;background:linear-gradient(90deg,var(--brand),var(--accent),#9f74be)}
+
+/* 常用版式；语义标识供 AI 按页面、内容角色定位，不预设跨页修改。 */
+.agenda-list{list-style:none;margin:0;padding:0;counter-reset:agenda;display:grid;gap:26px}.agenda-list li{counter-increment:agenda;display:grid;grid-template-columns:110px 380px 1fr;gap:25px;align-items:center;padding:24px 0;border-bottom:2px solid var(--wash)}.agenda-list li::before{content:counter(agenda,decimal-leading-zero);font:600 55px Arial;color:var(--accent)}.agenda-list span{font-size:40px;color:var(--brand);font-weight:600}.agenda-list p{font-size:32px;line-height:1.5}
+.section-break{background:var(--brand);color:#fff;padding:0}.divider-logo{position:absolute;left:120px;top:100px;width:380px;height:125px}.section-break .divider-label{position:absolute;left:120px;top:375px;font-size:33px;letter-spacing:.05em;color:#fff}.section-break h2{position:absolute;left:120px;right:120px;top:460px;font-size:112px;line-height:1.2;color:#fff}.divider-caption{position:absolute;left:120px;right:120px;top:645px;font-size:38px;line-height:1.55;color:#fff}.closing h2{font-size:150px;top:390px}.closing .divider-caption{top:600px;font-size:45px}.closing-contact{position:absolute;left:120px;bottom:125px;font-size:28px;color:#fff}.section-break::after{display:none}
+.workflow{list-style:none;margin:65px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:35px}.workflow li{padding:28px 0 0;border-top:6px solid var(--accent)}.workflow li>span{font-size:28px;color:var(--muted)}.workflow h3{font-size:40px;color:var(--brand);margin:23px 0}.workflow p{font-size:32px;line-height:1.6}.workflow+.takeaway{margin-top:65px}
+.figure-layout{display:grid;grid-template-columns:1.35fr 1fr;gap:65px}.figure-layout figure{margin:0}.figure-placeholder{height:405px;background:#f5f3f6;border:2px dashed #b9aabd;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:34px;line-height:1.6;color:var(--muted)}.figure-placeholder small{font-size:27px}.figure-layout figcaption{font-size:25px;line-height:1.5;color:var(--muted);margin-top:20px}.figure-commentary h3{font-size:37px;color:var(--brand);margin:0 0 22px}.figure-commentary h3:not(:first-child){margin-top:38px}.figure-commentary p{font-size:32px;line-height:1.65}
+.table-intro{font-size:32px;line-height:1.5;margin-bottom:35px}.evidence-table{width:100%;border-collapse:collapse;font-size:32px;line-height:1.45;text-align:left}.evidence-table th,.evidence-table td{padding:24px 25px;border-bottom:2px solid var(--wash)}.evidence-table thead th{background:var(--brand);color:#fff;font-weight:600}.evidence-table tbody th{color:var(--brand);font-weight:600;width:24%}
+.main-statement{font-size:63px;color:var(--brand);line-height:1.45;max-width:1530px;margin-bottom:62px}.conclusion-columns{display:grid;grid-template-columns:1fr 1fr;gap:100px}.conclusion-columns h3{font-size:37px;color:var(--brand);margin-bottom:25px}.conclusion-columns p{font-size:34px;line-height:1.65}.conclusion-columns+.takeaway{margin-top:58px}.reference-list{margin:0;padding-left:45px;display:grid;gap:45px;font-size:34px;line-height:1.7}.reference-list li{padding-left:20px}.reference-note{font-size:29px;color:var(--muted);margin-top:70px;line-height:1.6}
+
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* 内容模式：仅版式、素材与讲稿数据；翻页和控件由 Jemu 接管。 */
+html,body{height:auto;min-height:100%;overflow:auto;background:#e9e8e4}
+[data-jemu-deck]{width:1920px;margin:0 auto}
+[data-jemu-deck]>.slide{position:relative;width:1920px;height:1080px;margin:40px 0}
+@page{size:1920px 1080px;margin:0}
+@media print{html,body{margin:0;padding:0;background:none}[data-jemu-deck]>.slide{margin:0;break-after:page;break-inside:avoid}[data-jemu-deck]>.slide:last-child{break-after:auto}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<!-- 版式参考：所有“报告标题/内容”等均为待替换文字，不是研究结论。沿用布局即可，无需保留原页数。 -->
+<main data-jemu-deck data-width="1920" data-height="1080" aria-label="演示稿">
+  <section data-kind="cover" data-slide-id="cover" class="slide cover" aria-label="封面">
+    <!-- LOGO：logo-blue.png，用户设计包提供的校徽校名组合，浅色封面顶部居中；等比缩放，不改色，不裁切。 -->
+    <img class="logo cover-logo" src="logo-blue.png" alt="复旦大学校徽与校名">
+    <div class="cover-band">
+      <h1 data-slot="report-title" data-node-id="cover--report-title">报告标题</h1>
+      <p class="en" data-slot="report-subtitle" data-node-id="cover--report-subtitle">学术汇报副题</p>
+    </div>
+    <div class="cover-meta"><p><span>汇报人</span><b data-slot="presenter" data-node-id="cover--presenter">待填写</b></p><p><span>日期</span><b data-slot="date" data-node-id="cover--date">待填写</b></p></div>
+    <p class="cover-caption">FUDAN UNIVERSITY</p>
+    <!-- 深色背景需使用反白原件时，将图片 src 改为 logo-white.png；该原件来自复旦官网。 -->
+  </section>
+  <section data-slide-id="agenda" class="slide" aria-label="汇报目录" data-kind="agenda">
+    <header class="header"><h2 data-slot="section-title" data-node-id="agenda--section-title">汇报目录</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="agenda--section-subtitle">根据内容安排汇报顺序</p></header>
+    <div class="page-content"><ol class="agenda-list" data-role="agenda">
+      <li><span>研究背景</span><p data-slot="agenda-background" data-node-id="agenda--agenda-background">界定研究对象与问题</p></li>
+      <li><span>方法设计</span><p data-slot="agenda-method" data-node-id="agenda--agenda-method">说明处理流程与评价方法</p></li>
+      <li><span>分析与证据</span><p data-slot="agenda-evidence" data-node-id="agenda--agenda-evidence">呈现材料支持的发现或待验证问题</p></li>
+      <li><span>总结与安排</span><p data-slot="agenda-plan" data-node-id="agenda--agenda-plan">回答问题并说明后续工作</p></li>
+    </ol></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="agenda--footer-topic">汇报目录</span><span data-page>02 / 12</span></footer>
+  </section>
+  <section data-slide-id="divider" class="slide section-break" aria-label="章节过渡" data-kind="divider">
+    <!-- LOGO：logo-white.png，官方反白原件；深色背景使用，保留比例。 -->
+    <img class="logo divider-logo" src="logo-white.png" alt="复旦大学校徽与校名">
+    <p class="divider-label" data-slot="chapter-number" data-node-id="divider--chapter-number">章节标题</p>
+    <h2 data-slot="chapter-title" data-node-id="divider--chapter-title">研究方法</h2>
+    <p class="divider-caption" data-slot="chapter-lead" data-node-id="divider--chapter-lead">用一句话说明这一部分要解决的问题</p>
+  </section>
+  <section data-kind="questions" data-slide-id="questions" class="slide" aria-label="研究问题">
+    <header class="header"><h2 data-slot="section-title" data-node-id="questions--section-title">研究问题</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="questions--section-subtitle">研究对象与问题定义</p></header>
+    <div class="page-content">
+      <p class="lead" data-slot="lead" data-node-id="questions--lead">用一两句话说明研究对象，以及这次汇报希望回答的问题。</p>
+      <div class="topic-list">
+        <article><h3>问题背景</h3><p data-slot="background" data-node-id="questions--background">填写与研究问题直接相关的背景和已有证据。</p></article>
+        <article><h3>研究问题</h3><p data-slot="question" data-node-id="questions--question">填写一个清楚、可分析的问题，并界定研究范围。</p></article>
+        <article><h3>预期价值</h3><p data-slot="value" data-node-id="questions--value">说明研究结果可以帮助理解或改进什么。</p></article>
+      </div>
+    </div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="questions--footer-topic">研究主题</span><span data-page>04 / 12</span></footer>
+  </section>
+  <section data-slide-id="workflow" class="slide" aria-label="技术路线" data-kind="workflow">
+    <header class="header"><h2 data-slot="section-title" data-node-id="workflow--section-title">技术路线</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="workflow--section-subtitle">输入、处理与验证的关系</p></header>
+    <div class="page-content"><p class="lead" data-slot="workflow-lead" data-node-id="workflow--workflow-lead">沿实际处理顺序组织方法，说明每一步的输入与产出。</p>
+    <ol class="workflow" data-role="workflow">
+      <li><span>资料准备</span><h3 data-slot="step-1-title" data-node-id="workflow--step-1-title">确定输入</h3><p data-slot="step-1-body" data-node-id="workflow--step-1-body">填写数据或材料来源及纳入条件。</p></li>
+      <li><span>处理分析</span><h3 data-slot="step-2-title" data-node-id="workflow--step-2-title">实施方法</h3><p data-slot="step-2-body" data-node-id="workflow--step-2-body">填写主要处理步骤和方法。</p></li>
+      <li><span>结果核查</span><h3 data-slot="step-3-title" data-node-id="workflow--step-3-title">验证结果</h3><p data-slot="step-3-body" data-node-id="workflow--step-3-body">填写检查口径与评价方法。</p></li>
+      <li><span>汇报整理</span><h3 data-slot="step-4-title" data-node-id="workflow--step-4-title">形成产出</h3><p data-slot="step-4-body" data-node-id="workflow--step-4-body">填写图表、报告或可复现材料。</p></li>
+    </ol>
+    <p class="takeaway" data-role="takeaway" data-slot="workflow-note" data-node-id="workflow--workflow-note">说明关键依赖，或者哪一步最需要质量控制。</p></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="workflow--footer-topic">技术路线</span><span data-page>05 / 12</span></footer>
+  </section>
+  <section data-slide-id="figure" class="slide" aria-label="图文分析" data-kind="figure-text">
+    <header class="header"><h2 data-slot="section-title" data-node-id="figure--section-title">图文分析</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="figure--section-subtitle">让原始证据与解释相邻</p></header>
+    <div class="page-content"><div class="figure-layout">
+      <figure data-role="figure"><div class="figure-placeholder" data-slot="figure-placeholder" data-node-id="figure--figure-placeholder">在这里插入论文图、实验图或示意图<br><small>保留原比例，使用真实素材</small></div><figcaption data-slot="figure-caption" data-node-id="figure--figure-caption">图题与来源：填写原文图号、引用或 URL</figcaption></figure>
+      <div class="figure-commentary" data-role="figure-explanation"><h3 data-slot="figure-message" data-node-id="figure--figure-message">这张图说明什么？</h3><p data-slot="figure-observation" data-node-id="figure--figure-observation">描述能从图中直接观察到的现象。</p><h3>如何解释？</h3><p data-slot="figure-interpretation" data-node-id="figure--figure-interpretation">结合研究问题解释，并注明证据不能支持的结论。</p></div>
+    </div>
+    <p class="takeaway" data-role="takeaway" data-slot="figure-note" data-node-id="figure--figure-note">用一句话连接图中证据与本页要点。</p></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="figure--footer-topic">图文分析</span><span data-page>06 / 12</span></footer>
+  </section>
+  <section data-kind="comparison" data-slide-id="comparison" class="slide" aria-label="方法对照">
+    <header class="header"><h2 data-slot="section-title" data-node-id="comparison--section-title">方法对照</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="comparison--section-subtitle">比较口径与方法选择</p></header>
+    <div class="page-content columns">
+      <article class="method"><h3 data-slot="method-a" data-node-id="comparison--method-a">方法 A</h3><p><span class="label">基本思路</span><span data-slot="method-a-idea" data-node-id="comparison--method-a-idea">填写方法的核心做法。</span></p><p><span class="label">适用条件</span><span data-slot="method-a-scope" data-node-id="comparison--method-a-scope">填写它适合处理的对象。</span></p><p><span class="label">评价方式</span><span data-slot="method-a-evaluation" data-node-id="comparison--method-a-evaluation">填写如何检查结果。</span></p></article>
+      <article class="method"><h3 data-slot="method-b" data-node-id="comparison--method-b">方法 B</h3><p><span class="label">基本思路</span><span data-slot="method-b-idea" data-node-id="comparison--method-b-idea">填写另一种方法的核心做法。</span></p><p><span class="label">适用条件</span><span data-slot="method-b-scope" data-node-id="comparison--method-b-scope">填写比较时需要保持的条件。</span></p><p><span class="label">评价方式</span><span data-slot="method-b-evaluation" data-node-id="comparison--method-b-evaluation">填写与方法 A 一致的评价口径。</span></p></article>
+    </div>
+    <p class="takeaway" data-role="takeaway" data-slot="takeaway" data-node-id="comparison--takeaway">填写比较的依据或需要验证的差异。</p>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="comparison--footer-topic">研究方法</span><span data-page>07 / 12</span></footer>
+  </section>
+  <section data-slide-id="evidence" class="slide" aria-label="结果表格" data-kind="evidence-table">
+    <header class="header"><h2 data-slot="section-title" data-node-id="evidence--section-title">结果与证据</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="evidence--section-subtitle">指标口径、结果与适用范围</p></header>
+    <div class="page-content"><p class="table-intro" data-slot="table-intro" data-node-id="evidence--table-intro">表格中的数值与结论必须来自实际材料，尚未完成时保留待填写。</p>
+    <table class="evidence-table" data-role="evidence-table"><thead><tr><th>比较对象</th><th>指标或证据</th><th>观察结果</th><th>适用范围</th></tr></thead><tbody>
+      <tr><th data-slot="object-1" data-node-id="evidence--object-1">对象一</th><td data-slot="metric-1" data-node-id="evidence--metric-1">待填写</td><td data-slot="result-1" data-node-id="evidence--result-1">待填写</td><td data-slot="scope-1" data-node-id="evidence--scope-1">待填写</td></tr>
+      <tr><th data-slot="object-2" data-node-id="evidence--object-2">对象二</th><td data-slot="metric-2" data-node-id="evidence--metric-2">待填写</td><td data-slot="result-2" data-node-id="evidence--result-2">待填写</td><td data-slot="scope-2" data-node-id="evidence--scope-2">待填写</td></tr>
+      <tr><th data-slot="object-3" data-node-id="evidence--object-3">对象三</th><td data-slot="metric-3" data-node-id="evidence--metric-3">待填写</td><td data-slot="result-3" data-node-id="evidence--result-3">待填写</td><td data-slot="scope-3" data-node-id="evidence--scope-3">待填写</td></tr>
+    </tbody></table>
+    <p class="takeaway" data-role="takeaway" data-slot="table-note" data-node-id="evidence--table-note">说明最值得关注的差异，或仍需核查的问题。</p></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="evidence--footer-topic">结果表格</span><span data-page>08 / 12</span></footer>
+  </section>
+  <section data-kind="plan" data-slide-id="plan" class="slide" aria-label="工作计划">
+    <header class="header"><h2 data-slot="section-title" data-node-id="plan--section-title">工作计划</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="plan--section-subtitle">阶段任务与验收依据</p></header>
+    <div class="page-content"><table class="timeline"><thead><tr><th>阶段</th><th>主要任务</th><th>交付或验收</th></tr></thead><tbody>
+      <tr><td>准备</td><td data-slot="task-1" data-node-id="plan--task-1">确认资料与可行性</td><td data-slot="output-1" data-node-id="plan--output-1">填写验收依据</td></tr>
+      <tr><td>实施</td><td data-slot="task-2" data-node-id="plan--task-2">开展分析或实验</td><td data-slot="output-2" data-node-id="plan--output-2">填写实际交付</td></tr>
+      <tr><td>验证</td><td data-slot="task-3" data-node-id="plan--task-3">检查质量与解释结果</td><td data-slot="output-3" data-node-id="plan--output-3">填写验证方法</td></tr>
+      <tr><td>整理</td><td data-slot="task-4" data-node-id="plan--task-4">形成报告与汇报材料</td><td data-slot="output-4" data-node-id="plan--output-4">填写最终成果</td></tr>
+    </tbody></table></div>
+    <p class="takeaway" data-role="takeaway" data-slot="plan-note" data-node-id="plan--plan-note">时间和任务按用户实际计划填写，注明关键依赖。</p>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="plan--footer-topic">执行安排</span><span data-page>09 / 12</span></footer>
+  </section>
+  <section data-slide-id="conclusion" class="slide" aria-label="总结与局限" data-kind="conclusion">
+    <header class="header"><h2 data-slot="section-title" data-node-id="conclusion--section-title">总结与局限</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="conclusion--section-subtitle">回答问题，并保留结论的边界</p></header>
+    <div class="page-content"><p class="main-statement" data-role="main-conclusion" data-slot="main-conclusion" data-node-id="conclusion--main-conclusion">用一句话回答本次汇报的核心问题</p>
+    <div class="conclusion-columns">
+      <article data-role="finding"><h3>主要发现</h3><p data-slot="finding" data-node-id="conclusion--finding">填写有证据支持的发现，避免把预期写成结果。</p></article>
+      <article data-role="limitation"><h3>适用范围与局限</h3><p data-slot="limitation" data-node-id="conclusion--limitation">填写样本范围、方法限制和仍不确定的部分。</p></article>
+    </div>
+    <p class="takeaway" data-role="takeaway" data-slot="next-step" data-node-id="conclusion--next-step">填写下一步最需要验证或改进的事项。</p></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="conclusion--footer-topic">总结与局限</span><span data-page>10 / 12</span></footer>
+  </section>
+  <section data-slide-id="references" class="slide" aria-label="参考资料" data-kind="references">
+    <header class="header"><h2 data-slot="section-title" data-node-id="references--section-title">参考资料</h2><p class="subtitle" data-slot="section-subtitle" data-node-id="references--section-subtitle">使用经过核验的实际来源</p></header>
+    <div class="page-content"><ol class="reference-list" data-role="references">
+      <li data-slot="reference-1" data-node-id="references--reference-1">填写文献作者、年份、标题、来源及可访问链接。</li>
+      <li data-slot="reference-2" data-node-id="references--reference-2">填写数据、工具或官方文档的名称与来源。</li>
+      <li data-slot="reference-3" data-node-id="references--reference-3">填写图片、图表或其他材料的原始出处。</li>
+    </ol><p class="reference-note" data-slot="reference-note" data-node-id="references--reference-note">页内图注与引用应能对应到具体来源，不生成虚构文献。</p></div>
+    <footer class="footer"><span data-slot="footer-topic" data-node-id="references--footer-topic">参考资料</span><span data-page>11 / 12</span></footer>
+  </section>
+  <section data-slide-id="closing" class="slide section-break closing" aria-label="讨论与致谢" data-kind="closing">
+    <!-- LOGO：logo-white.png，官方反白原件；深色背景使用，保留比例。 -->
+    <img class="logo divider-logo" src="logo-white.png" alt="复旦大学校徽与校名">
+    <h2 data-slot="closing-title" data-node-id="closing--closing-title">谢谢</h2><p class="divider-caption" data-slot="closing-subtitle" data-node-id="closing--closing-subtitle">讨论与建议</p>
+    <p class="closing-contact" data-slot="contact" data-node-id="closing--contact">需要时填写真实联系方式</p>
+  </section>
+</main>
+<!-- NOTES：每页一项，与 .slide 的顺序及数量同步。生成新稿时替换。 -->
+<script type="application/json" id="speaker-notes">["填写本次汇报的开场讲稿。", "说明本次汇报的顺序与重点。", "过渡到本章节，说明它与研究问题的关系。", "填写研究背景、研究问题和预期价值的讲稿。", "解释实际技术路线及每一步的产出。", "解释图中直接证据、推断和局限，注明来源。", "填写方法选择、比较口径和评价方式的讲稿。", "讲清实际指标和结果，不把待填写占位当作数据。", "填写真实工作安排和交付计划的讲稿。", "回答研究问题，说明证据范围与尚未解决的问题。", "核对来源，不需要逐条念参考资料。", "感谢听众并进入讨论。"]</script>
+
+</body>
+</html>

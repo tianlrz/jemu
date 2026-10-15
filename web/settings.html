@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>设置</title><link rel="stylesheet" href="/settings.css"></head>
+<body>
+  <header><a id="backToWork" href="/">← 返回作品</a><span>设置保存在这台电脑</span></header>
+  <main>
+    <div class="page-title"><h1>设置</h1><p>选择作品的存档位置，管理备份与恢复。</p></div>
+    <div class="settings-grid">
+      <section class="card" aria-labelledby="storageTitle">
+        <div class="section-title"><span class="step">01</span><div><h2 id="storageTitle">存档位置</h2><p>按作品的素材情况，选择适合的云盘。</p></div></div>
+        <div class="recommendation"><strong>HTML 和少量图片</strong><span>坚果云，直接连接即可。</span><strong>视频、音频和较多附件</strong><span>可选 Google Drive、OneDrive 或夸克网盘。</span></div>
+        <label>存档方式<select id="cloudProvider"><optgroup label="轻量作品"><option value="nutstore">坚果云</option></optgroup><optgroup label="素材较多"><option value="google-drive">Google Drive</option><option value="onedrive">OneDrive</option><option value="quark">夸克网盘</option></optgroup><optgroup label="其他位置"><option value="dropbox">Dropbox</option><option value="folder">其他同步／备份文件夹</option></optgroup></select></label>
+        <div id="cloudFolderFields" hidden><label><span id="cloudFolderLabel">同步文件夹</span><input id="cloudFolder" placeholder="粘贴本机目录的完整路径" autocomplete="off"></label><p id="cloudFolderHelp" class="help"></p></div>
+        <div id="cloudDAVFields"><label>账号邮箱<input id="cloudUsername" type="email" autocomplete="username" placeholder="坚果云账号"></label><label>应用密码<input id="cloudPassword" type="password" autocomplete="off" placeholder="第三方应用密码，非登录密码"></label><p class="help">在坚果云安全设置中创建<a href="https://help.jianguoyun.com/?p=2064" target="_blank" rel="noopener noreferrer">第三方应用密码 ↗</a>。密码加密保存在本机，不随作品导出。</p></div>
+        <div class="actions"><button id="cloudSaveConfig" class="primary">保存设置</button><button id="cloudTest">验证连接</button><button id="cloudOpenFolder" hidden>打开目录 ↗</button></div>
+        <p id="cloudStatus" class="help status" role="status">正在读取设置…</p>
+        <button id="reloadSettings" class="text-button" hidden>重新载入已保存的设置</button>
+        <button id="cloudDisconnect" class="text-button">断开关联</button>
+      </section>
+      <section class="card" aria-labelledby="backupTitle">
+        <div class="section-title"><span class="step">02</span><div><h2 id="backupTitle">备份与恢复</h2><p>每份存档包含作品、素材和全部版本。</p></div></div>
+        <label>选择作品<select id="backupDeck" aria-label="选择备份作品"><option value="">正在读取作品…</option></select></label>
+        <p class="help">备份已保存的内容。若作品仍有未保存的编辑，请先回到编辑窗口保存。</p>
+        <button id="cloudBackup" class="primary full" disabled>备份所选作品</button>
+        <div class="list-heading"><h3>可恢复的存档</h3><button id="cloudRefresh">刷新</button></div>
+        <label id="cloudMonthField">存档月份（UTC）<input id="cloudMonth" type="month"></label>
+        <div id="cloudArchives" class="help">保存设置后，点击刷新查看存档。</div>
+        <div class="actions"><button id="cloudNewer" hidden>较新一页</button><button id="cloudOlder" hidden>较早一页</button></div>
+        <p class="help archive-note">恢复会新建作品副本，保留现有作品与历史。仅在你点击操作时连接云盘。</p>
+      </section>
+    </div>
+  </main>
+  <div id="toast" role="status" hidden></div>
+  <script>window.DECKROOM_TOKEN='__SESSION_TOKEN__';</script><script src="/settings.js"></script><script src="/cloud.js"></script>
+</body></html>

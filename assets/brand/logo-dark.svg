@@ -1,0 +1,19 @@
+<svg role="img" aria-label="Jemu · 简幕" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <rect width="512" height="512" rx="115" fill="#090A0F" />
+  
+  <!-- 幻灯片银幕外框 + 字母 J 一笔画结构 -->
+  <path d="M 120 260 
+           L 120 160 
+           C 120 138, 138 120, 160 120 
+           L 340 120 
+           L 340 310 
+           C 340 365, 295 405, 240 405 
+           C 190 405, 155 370, 155 325" 
+        fill="none" stroke="#F8FAFC" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- 内部代表排版布局的极简色块（被挪动中的元素） -->
+  <rect x="175" y="175" width="95" height="65" rx="12" fill="#38BDF8" />
+
+  <!-- 右上角代表“人手直接拖拽/微调”的选中锚点（Handle） -->
+  <rect x="316" y="96" width="48" height="48" rx="12" fill="#090A0F" stroke="#818CF8" stroke-width="14" />
+</svg>

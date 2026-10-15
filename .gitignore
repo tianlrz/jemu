@@ -1,0 +1,14 @@
+library/
+.runtime/
+__pycache__/
+*.log
+*.zip
+.env
+.env.*
+!.env.example
+*.secret
+.venv/
+venv/
+dist/
+build/
+exports/

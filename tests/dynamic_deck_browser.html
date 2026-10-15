@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8"><title>Dynamic deck adapter tests</title>
+<h1>Dynamic deck adapter tests</h1><pre id="result">Running…</pre><script src="/dynamic-deck.js"></script>
+<script>
+(async()=>{
+  const results=[],assert=(condition,message)=>{if(!condition)throw Error(message);results.push('PASS '+message);};
+  const frame=document.createElement('iframe');document.body.append(frame);
+  const source=await (await fetch('/__test/source.html')).text();
+  const loaded=new Promise(resolve=>frame.onload=resolve);frame.srcdoc=source;await loaded;
+  const d=frame.contentDocument;
+  d.querySelector('.deck-toolbar button').onclick=()=>{
+    d.querySelector('.deck-viewport').remove();
+    const list=d.createElement('div');list.className='deck-list-viewport';
+    for(let i=0;i<3;i++){const row=d.createElement('div');row.className='slide-wrapper';row.innerHTML='<div class="slide-canvas"><h1>Generated page '+(i+1)+'</h1></div>';list.append(row);}
+    d.querySelector('#root').append(list);
+  };
+  const adapted=await JemuDynamicDeck.prepare(d,{url:location.origin+'/__test/source.html',signal:new AbortController().signal});
+  const parsed=new DOMParser().parseFromString(adapted.html,'text/html');
+  assert(adapted.total===3,'all declared pages materialized');
+  assert(parsed.querySelectorAll('[data-jemu-deck]>section').length===3,'clean static deck contains three pages');
+  assert(parsed.querySelector('h1').textContent==='Saved edited title','saved GUI text survives React-style rerender');
+  assert(parsed.querySelector('h1').style.translate==='0px 50px','saved geometry survives conversion');
+  assert(!parsed.querySelector('.deck-toolbar'),'source chrome excluded from content');
+  assert(!parsed.querySelector('script'),'executable source runtime excluded');
+  assert(parsed.querySelector('base').href===location.origin+'/__test/','relative assets retain original base');
+  assert(!JemuDynamicDeck.hinted(parsed),'normalized source does not adapt recursively');
+  assert(parsed.querySelector('[data-jemu-deck]').dataset.width==='1920','design dimensions preserved');
+  const cleanLoaded=new Promise(resolve=>frame.onload=resolve);frame.srcdoc=adapted.html;await cleanLoaded;
+  const output=frame.contentDocument;
+  assert(output.defaultView.getComputedStyle(output.querySelector('section')).height==='1080px','fixed-height slide layout rendered by browser');
+  const rules=[...output.styleSheets].flatMap(sheet=>[...sheet.cssRules]);
+  assert(rules.some(rule=>rule.conditionText==='print'&&[...rule.cssRules].some(inner=>inner.style?.breakAfter==='page')),'all pages have browser-parsed print page breaks');
+  const ordinary=document.implementation.createHTMLDocument('ordinary');ordinary.body.innerHTML='<section>ordinary webpage</section>';
+  assert(await JemuDynamicDeck.prepare(ordinary,{url:location.href})===null,'ordinary HTML remains native');
+  const tooMany=document.implementation.createHTMLDocument('too many');tooMany.body.innerHTML='<div class="deck-toolbar"><button>展开全部 201 页</button></div><div class="slide-canvas"></div>';
+  let rejected=false;try{await JemuDynamicDeck.prepare(tooMany,{url:location.href});}catch{rejected=true;}
+  assert(rejected,'expansion page budget enforced before DOM growth');
+  frame.remove();document.querySelector('#result').textContent=results.join('\n');document.documentElement.dataset.result='pass';
+  // Independent file export is covered by export_layout_browser.html and
+  // render_exports_test.py; it deliberately no longer calls preview.print().
+})().catch(error=>{document.querySelector('#result').textContent='FAIL '+error.stack;document.documentElement.dataset.result='fail';});
+</script>
