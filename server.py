@@ -77,6 +77,13 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def content_mime(path):
+    # Windows registry associations can incorrectly label .mjs/.js as text/plain.
+    # nosniff and ES modules require a JavaScript MIME type on every machine.
+    if path.suffix.lower() in ('.js','.mjs'):return 'text/javascript'
+    return mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
+
+
 def atomic_json(path, value):
     atomic_write(path, json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
 
@@ -330,10 +337,8 @@ class Handler(BaseHTTPRequestHandler):
                         target = next((target / name for name in ('index.html', 'index.htm') if (target / name).is_file()), target / 'index.html')
                         if not path.endswith('/'):
                             self.send_response(301);self.send_header('Location', quote(path, safe='/') + '/');self.send_header('Content-Length','0');self.end_headers();return
-                    mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+                    mime = content_mime(target)
                     # Preserve BOM/meta/@charset detection for imported legacy documents.
-                    if mime == 'application/octet-stream' and target.suffix.lower() in ('.js', '.mjs'):
-                        mime = 'text/javascript'
                     return self.send_file(target, mime)
                 if path in ("/", "/index.html", "/settings", "/settings.html"):
                     page='settings.html' if path in ('/settings','/settings.html') else 'index.html'
@@ -343,7 +348,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(raw.encode("utf-8"), content_type="text/html; charset=utf-8")
                 if path in ("/app.js", "/app.css", "/resources.js", "/compat.js", "/dynamic-deck.js", "/export-layout.js", "/fullscreen.js", "/cloud.js", "/automation.js", "/settings.js", "/settings.css", "/presenting.js", "/presenter.html", "/presenter.js", "/presenter.css"):
                     target = ROOT / "web" / path.lstrip("/")
-                    return self.send(target.read_bytes(), content_type=(mimetypes.guess_type(target.name)[0] or "text/plain") + "; charset=utf-8")
+                    return self.send(target.read_bytes(), content_type=content_mime(target) + "; charset=utf-8")
                 self.send({"error": "未找到文件"}, 404)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             self.close_connection = True
