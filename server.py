@@ -28,6 +28,7 @@ from edit_exports import build_artifacts, full_bundle
 from cloud_archives import FolderArchiveStore, create_archive, restore_archive
 from credentials import load_secret, save_secret
 from webdav_store import NutstoreArchiveStore, NUTSTORE_URL
+from version_store import Version, write_snapshot
 
 ROOT = Path(__file__).resolve().parent
 VERSION = (ROOT/'VERSION').read_text(encoding='utf8').strip() if (ROOT/'VERSION').is_file() else 'dev'
@@ -183,7 +184,8 @@ def snapshot(directory, label, changes=None, *, force=False):
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix('.zip.tmp')
     try:
-        archive_document(directory, temporary)
+        # Assets of 64 KiB or more are kept once in versions/blobs, not copied into every version.
+        write_snapshot(directory / "document", tree_files(directory / "document"), temporary, directory / "versions" / "blobs")
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
@@ -612,20 +614,19 @@ class Handler(BaseHTTPRequestHandler):
                     version = next((v for v in meta["versions"] if v["id"] == data.get("version")), None)
                     if not version:
                         raise ValueError("未找到此版本")
-                    with zipfile.ZipFile(directory / "versions" / (version["id"] + ".zip")) as archive:
-                        # Validate and stage before replacing the live document; keep the replaced tree recoverable.
+                    with Version(directory / "versions" / (version["id"] + ".zip"), directory / "versions" / "blobs") as archive:
+                        # Validate and stage before replacing the live document.
                         staged = Path(tempfile.mkdtemp(prefix="restore-", dir=directory))
                         try:
                             total = 0
-                            for item in archive.infolist():
-                                target = safe_child(staged, item.filename)
-                                total += item.file_size
+                            for name, size in archive.sizes().items():
+                                target = safe_child(staged, name)
+                                total += size
                                 if total > MAX_BYTES:
                                     raise ValueError("版本文件过大")
-                                if not item.is_dir():
-                                    target.parent.mkdir(parents=True, exist_ok=True)
-                                    with archive.open(item) as source, target.open('wb') as dest:
-                                        shutil.copyfileobj(source, dest, 64 * 1024)
+                                target.parent.mkdir(parents=True, exist_ok=True)
+                                with archive.open(name) as source, target.open('wb') as dest:
+                                    shutil.copyfileobj(source, dest, 64 * 1024)
                         except BaseException:
                             shutil.rmtree(staged, ignore_errors=True)
                             raise
@@ -647,6 +648,9 @@ class Handler(BaseHTTPRequestHandler):
                         shutil.rmtree(staged, ignore_errors=True)
                         raise
                     meta = snapshot(directory, "恢复至 " + version["created"])
+                    # The replaced tree matched the latest version (current_meta snapshots external edits
+                    # first), so once the restore is recorded this full copy is redundant.
+                    shutil.rmtree(old, ignore_errors=True)
                 elif action == "export-edit":
                     mode = data.get("mode")
                     if mode not in ("trace", "full"):

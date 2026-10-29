@@ -18,3 +18,13 @@ jobs:
       - run: node tests/compat.test.cjs
       - run: node tests/resources.test.cjs
       - run: node tests/fullscreen.test.cjs
+      - name: Windows launchers find a real Python 3.10+
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          set JEMU_DRY_RUN=1
+          call Start.cmd > start.txt || exit /b 1
+          type start.txt
+          findstr /i /c:"pythonw.exe" start.txt || exit /b 1
+          findstr /i /c:"WindowsApps" start.txt && exit /b 1
+          call jemu.cmd --help

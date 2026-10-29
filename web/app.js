@@ -206,7 +206,8 @@ function pasteText(value){
     if(payload.schema!=='deckroom.element'||typeof payload.html!=='string')throw Error('剪贴板对象格式无效');
     insertElement(payload);return;
   }
-  const el=doc().createElement('p');el.textContent=value;Object.assign(el.style,{fontFamily:'Microsoft YaHei, Arial, sans-serif',fontSize:'36px',lineHeight:'1.5',color:'#26332f',whiteSpace:'pre-wrap'});
+  // Inherit the page's own font and colour so pasted text stays readable on dark or branded slides.
+  const el=doc().createElement('p');el.textContent=value;Object.assign(el.style,{fontSize:paged()?'36px':'',lineHeight:'1.5',whiteSpace:'pre-wrap'});
   insertElement({html:el.outerHTML,box:{x:120,y:150,width:700,height:Math.max(70,Math.min(600,value.split('\n').length*55))}});
 }
 function bindClipboard(targetDocument){
@@ -272,7 +273,7 @@ function updatePage(){
   document.body.classList.toggle('read-only-content',!state.canEdit);
   for(const id of ['prevButton','audiencePrev'])$(id).disabled=index<=0;
   for(const id of ['nextButton','audienceNext'])$(id).disabled=index>=total-1;
-  $('modeHint').textContent=state.edit?'单击选中 · 双击改字 · 拖动边框移动':pages?'← → 翻页 · 点击「轻编辑」修改':'自由网页 · 保留滚动和原生交互';
+  $('modeHint').textContent=state.edit?'单击选中 · 拖动对象移动 · 双击改字':pages?'← → 翻页 · 点击「轻编辑」修改':'自由网页 · 保留滚动和原生交互';
   selectionRect();presentation?.sync();
 }
 function navigate(delta){goTo(currentIndex()+delta);}
@@ -336,7 +337,7 @@ function setEdit(enabled) {
   if(enabled&&!state.canEdit)return toast('此页面可展示；直接编辑仅支持稿件目录内的 HTML 页面');
   commitText();state.edit=enabled;
   $('editButton').setAttribute('aria-pressed',String(enabled));
-  $('modeHint').textContent=enabled?'单击选中 · 双击改字 · 拖动边框移动':'单击选中 · 双击改字 · ← → 翻页';
+  $('modeHint').textContent=enabled?'单击选中 · 拖动对象移动 · 双击改字':'单击选中 · 双击改字 · ← → 翻页';
   const d=doc();if(d)d.documentElement.dataset.deckroomEdit=enabled?'true':'false';
   if(enabled)setPanel('edit');else{clearSelection();if(state.panel==='edit')setPanel(null);}
   updatePage();
@@ -408,10 +409,11 @@ frame.addEventListener('load',async()=>{
   clearSelection();
   attachPureDocument();
   if(stage()&&Number.isInteger(state.page))stage().goTo(state.page);
-  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important;text-transform:none!important}';d.head.append(style);
+  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important;text-transform:none!important}html[data-deckroom-edit="true"] body *{-webkit-user-select:none;user-select:none}html[data-deckroom-edit="true"] [data-deckroom-inline],html[data-deckroom-edit="true"] [data-deckroom-inline] *{-webkit-user-select:text;user-select:text}';d.head.append(style);
   // The workspace supplies navigation; keep the slide's own controls for standalone presentation only.
   if(stage()?.shadowRoot){const controls=d.createElement('style');controls.textContent='.overlay,.tapzones{display:none!important}';stage().shadowRoot.append(controls);}
   d.addEventListener('click',event=>{
+    if(state.suppressClick){state.suppressClick=false;event.preventDefault();event.stopImmediatePropagation();return;}
     const target=event.target instanceof frame.contentWindow.Element?event.target:null;
     if(!target)return;
     if(target.hasAttribute('data-deckroom-ui')||target.hasAttribute('data-jemu-canvas')){if(!state.presenting)clearSelection();return;}
@@ -421,6 +423,18 @@ frame.addEventListener('load',async()=>{
     event.preventDefault();event.stopImmediatePropagation();
     const el=target.closest('[data-node-id],[data-slot],[data-role],h1,h2,h3,p,span,b,strong,em,a,li,article,figure,img,td,th,div');select(el);frame.contentWindow.focus();
   },true);
+  // Drag the selected object itself, like presentation software; a click without movement still selects inside it.
+  d.addEventListener('pointerdown',event=>{
+    state.suppressClick=false;
+    const el=state.selected;
+    if(!state.edit||state.presenting||event.button!==0||state.inline||!el||!el.contains(event.target))return;
+    const before=elementSnapshot(el),p=getPosition(el),x=event.clientX,y=event.clientY,canvas=designCanvas()?.getBoundingClientRect(),scale=canvas?canvas.width/designSize().width:1;
+    let moved=false;event.target.setPointerCapture?.(event.pointerId);
+    const move=e=>{if(!moved&&Math.hypot(e.clientX-x,e.clientY-y)<4)return;moved=true;e.preventDefault();setPosition(Math.round(p.x+(e.clientX-x)/scale),Math.round(p.y+(e.clientY-y)/scale));};
+    const end=()=>{d.removeEventListener('pointermove',move,true);d.removeEventListener('pointerup',end,true);d.removeEventListener('pointercancel',end,true);if(moved){state.suppressClick=true;record(el,before,'move');}};
+    d.addEventListener('pointermove',move,true);d.addEventListener('pointerup',end,true);d.addEventListener('pointercancel',end,true);
+  },true);
+  d.addEventListener('dragstart',event=>{if(state.edit&&!state.presenting)event.preventDefault();},true);
   d.addEventListener('dblclick',event=>{if(state.presenting||!state.edit)return;const el=event.target.closest?.('h1,h2,h3,p,span,b,strong,em,a,li,td,th,[data-node-id]');if(!textLeaf(el))return;event.preventDefault();select(el);beginInline(el,true);},true);
   d.addEventListener('input',event=>{if(state.inline?.el!==event.target)return;const active=state.inline;if(!state.pendingText)state.pendingText={el:active.el,before:active.before};active.changed=true;$('textValue').value=active.el.innerText;updateDirty();selectionRect();},true);
   d.addEventListener('blur',event=>{if(state.inline?.el===event.target)commitText();},true);
@@ -613,7 +627,7 @@ async function renderExport(kind){
       job=await api('/api/decks/'+deck+'/render-jobs/'+job.id);
     }
     if(job.status!=='completed')throw Error(job.message||'导出没有完成');
-    const a=document.createElement('a');a.href=job.downloadUrl;a.download='';a.click();
+    const a=document.createElement('a');a.href=job.downloadUrl;a.download='jemu-deck.'+kind;a.click();
     toast((kind==='pptx'?'PPT':'PDF')+' 已生成'+(job.pages?' · '+job.pages+' 页':'')+'，开始下载');
   }finally{state.rendering=false;updatePage();}
 }
@@ -666,7 +680,7 @@ async function exportEdits(mode) {
     const response=await fetch('/api/decks/'+state.deck.id+'/export-edit',{method:'POST',headers:{'Content-Type':'application/json','X-Deckroom-Token':window.DECKROOM_TOKEN},body:JSON.stringify({mode,prepare:true,baseRevision:state.revision,selection,scope:$('scope').value,intent:$('intent').value})});
     if(!response.ok){const error=await response.json();if(response.status===409)$('externalBanner').hidden=false;throw new Error(error.error||'导出没有完成');}
     const result=await response.json(),a=document.createElement('a');
-    a.href=result.downloadUrl;a.download='';a.click();
+    a.href=result.downloadUrl;a.download=mode==='trace'?'jemu-edits.md':'jemu-full.zip';a.click();
     status.textContent=mode==='trace'?'已导出编辑痕迹。把 MD 文件交给已有原稿的 AI 即可。':'已导出完整编辑包。解压可直接展示，也可以把 ZIP 整包交给 AI。';
     toast(mode==='trace'?'编辑痕迹已生成并开始下载':'完整编辑包已生成并开始下载');
   } catch(error){status.textContent=error.message;throw error;}
@@ -685,7 +699,7 @@ function chooseFiles(files,folder) {
   const preferred=html.find(item=>/^(index|reference)\.html?$/i.test(item.path));if(preferred)$('entrySelect').value=preferred.path;
   $('importName').value=folder?prefix.slice(0,-1):(first?.name||'').replace(/\.html?$/i,'');
   const size=state.importing.reduce((n,item)=>n+item.file.size,0);
-  $('importSummary').textContent=`${state.importing.length} 个文件 · ${(size/1024/1024).toFixed(1)} MB`+(html.length?'':' · 未找到 HTML');
+  $('importSummary').textContent=`${state.importing.length} 个文件 · ${(size/1024/1024).toFixed(1)} MB`+(html.length?'':' · 未找到 HTML')+(size>100*1024*1024?' · 超过 100 MB 上限，请移走视频等大文件后再导入':'');
   $('confirmImport').disabled=!html.length||size>100*1024*1024;
 }
 $('folderInput').onchange=event=>chooseFiles(event.target.files,true);$('htmlInput').onchange=event=>chooseFiles(event.target.files,false);
