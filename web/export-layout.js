@@ -25,7 +25,8 @@ const JemuExportLayout=(()=>{
     const style=result.createElement('style');style.dataset.jemuExportLayout='';
     style.textContent=`html,body{margin:0!important;padding:0!important;width:${width}px!important;height:auto!important;overflow:visible!important;background:white!important}[data-jemu-export]{display:block!important;position:static!important;width:${width}px!important;height:auto!important;margin:0!important;padding:0!important;gap:0!important}[data-jemu-export-page]{display:block!important;visibility:visible!important;position:relative!important;inset:auto!important;width:${width}px!important;height:${height}px!important;min-height:${height}px!important;max-height:${height}px!important;margin:0!important;overflow:hidden!important;box-sizing:border-box!important;break-after:page;break-inside:avoid;box-shadow:none!important;transform:none!important;zoom:1!important}[data-jemu-export-page]:last-child{break-after:auto}[data-jemu-export-page]>.slide-canvas{transform:none!important;box-shadow:none!important}*{animation:none!important;transition:none!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}@page{size:${width}px ${height}px;margin:0}`;
     result.head.append(style);
-    result.querySelectorAll('*').forEach(node=>{for(const attr of [...node.attributes])if(attr.name.startsWith('on'))node.removeAttribute(attr.name);});
+    // The static audit rejects handlers and javascript: URLs; a print copy needs neither.
+    result.querySelectorAll('*').forEach(node=>{for(const attr of [...node.attributes])if(attr.name.startsWith('on')||(['href','src','action','xlink:href','formaction'].includes(attr.name)&&/^\s*javascript:/i.test(attr.value)))node.removeAttribute(attr.name);});
     const html='<!doctype html>\n'+result.documentElement.outerHTML;
     if(new TextEncoder().encode(html).length>10*1024*1024)throw Error('导出 HTML 超过 10 MiB');
     return html;

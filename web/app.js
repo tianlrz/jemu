@@ -230,7 +230,9 @@ function getPosition(el=state.selected) {
   return {x:Number.isFinite(values[0])?values[0]:0,y:Number.isFinite(values[1])?values[1]:0};
 }
 function updatePosition() { const p=getPosition(); $('positionX').value=Math.round(p.x); $('positionY').value=Math.round(p.y); }
-function setPosition(x,y) { if(!state.selected)return; state.selected.style.translate=`${x}px ${y}px`; updatePosition(); selectionRect(); }
+// translate, width and height do not apply to inline boxes such as span/b/a: make them inline-block first.
+function ensureBox(el){if(el.ownerDocument.defaultView.getComputedStyle(el).display==='inline')el.style.display='inline-block';}
+function setPosition(x,y) { if(!state.selected)return; ensureBox(state.selected); state.selected.style.translate=`${x}px ${y}px`; updatePosition(); selectionRect(); }
 function selectionRect() {
   const el=state.selected, box=$('selectionBox');
   if(!state.edit || !el?.isConnected) {box.hidden=true;return;}
@@ -344,7 +346,8 @@ function renderDecks() {
   for(const item of state.decks) {
     const button=document.createElement('button');button.className='deck'+(state.deck?.id===item.id?' active':'');
     const title=document.createElement('div');title.textContent=item.name;
-    const detail=document.createElement('span');detail.textContent=`${item.versions.length} 个版本 · HTML`;
+    const detail=document.createElement('span');detail.textContent=item.error?'无法读取：'+item.error:`${item.versions.length} 个版本 · HTML`;
+    if(item.error){button.title=item.error;button.classList.add('broken');}
     button.append(title,detail);button.onclick=run(()=>openDeck(item));$('decks').append(button);
   }
 }
@@ -405,7 +408,7 @@ frame.addEventListener('load',async()=>{
   clearSelection();
   attachPureDocument();
   if(stage()&&Number.isInteger(state.page))stage().goTo(state.page);
-  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important}';d.head.append(style);
+  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important;text-transform:none!important}';d.head.append(style);
   // The workspace supplies navigation; keep the slide's own controls for standalone presentation only.
   if(stage()?.shadowRoot){const controls=d.createElement('style');controls.textContent='.overlay,.tapzones{display:none!important}';stage().shadowRoot.append(controls);}
   d.addEventListener('click',event=>{
@@ -610,7 +613,7 @@ async function renderExport(kind){
       job=await api('/api/decks/'+deck+'/render-jobs/'+job.id);
     }
     if(job.status!=='completed')throw Error(job.message||'导出没有完成');
-    const a=document.createElement('a');a.href=job.downloadUrl;a.download='jemu-deck.'+kind;a.click();
+    const a=document.createElement('a');a.href=job.downloadUrl;a.download='';a.click();
     toast((kind==='pptx'?'PPT':'PDF')+' 已生成'+(job.pages?' · '+job.pages+' 页':'')+'，开始下载');
   }finally{state.rendering=false;updatePage();}
 }
@@ -643,7 +646,7 @@ $('selectionBox').addEventListener('pointerdown',event=>{
     const west=direction.includes('w'),north=direction.includes('n');
     let width=Math.max(16,before.box.width+(west?-dx:direction.includes('e')?dx:0)),height=Math.max(16,before.box.height+(north?-dy:direction.includes('s')?dy:0));
     if(direction.length===2&&(e.shiftKey||['IMG','SVG'].includes(el.tagName))){const ratio=before.box.width/before.box.height;if(Math.abs(dx)>Math.abs(dy)*ratio)height=width/ratio;else width=height*ratio;}
-    Object.assign(el.style,{width:Math.round(width)+'px',height:Math.round(height)+'px',boxSizing:'border-box',minWidth:'0',minHeight:'0',maxWidth:'none',maxHeight:'none'});
+    ensureBox(el);Object.assign(el.style,{width:Math.round(width)+'px',height:Math.round(height)+'px',boxSizing:'border-box',minWidth:'0',minHeight:'0',maxWidth:'none',maxHeight:'none'});
     setPosition(p.x+(west?before.box.width-width:0),p.y+(north?before.box.height-height:0));
   };
   const end=e=>{handle.releasePointerCapture(e.pointerId);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);record(el,before,direction==='move'?'move':'resize');};
@@ -663,7 +666,7 @@ async function exportEdits(mode) {
     const response=await fetch('/api/decks/'+state.deck.id+'/export-edit',{method:'POST',headers:{'Content-Type':'application/json','X-Deckroom-Token':window.DECKROOM_TOKEN},body:JSON.stringify({mode,prepare:true,baseRevision:state.revision,selection,scope:$('scope').value,intent:$('intent').value})});
     if(!response.ok){const error=await response.json();if(response.status===409)$('externalBanner').hidden=false;throw new Error(error.error||'导出没有完成');}
     const result=await response.json(),a=document.createElement('a');
-    a.href=result.downloadUrl;a.download=mode==='trace'?'jemu-edits.md':'jemu-full.zip';a.click();
+    a.href=result.downloadUrl;a.download='';a.click();
     status.textContent=mode==='trace'?'已导出编辑痕迹。把 MD 文件交给已有原稿的 AI 即可。':'已导出完整编辑包。解压可直接展示，也可以把 ZIP 整包交给 AI。';
     toast(mode==='trace'?'编辑痕迹已生成并开始下载':'完整编辑包已生成并开始下载');
   } catch(error){status.textContent=error.message;throw error;}
@@ -707,4 +710,4 @@ $('stopButton').onclick=run(async()=>{commitText();if(state.dirty&&!confirm('还
 presentation=new DeckroomPresentation({read:presentationState,navigate,goTo,exit:leavePresentation,restart:async()=>{await resetPresentation();presentation.start(true);},saveNotes:saveSpeakerNotes,onConnection:connected=>{document.body.dataset.presenterConnected=String(connected);$('notesButton').textContent=connected?'演讲者已连接 ↗':'演讲者窗口 ↗';$('audiencePresenter').textContent=connected?'演讲者已连接 ↗':'演讲者窗口 ↗';},onTick:timer=>{const seconds=Math.floor(timer.elapsedMs/1000);$('timerButton').textContent=Math.floor(seconds/60).toString().padStart(2,'0')+':'+(seconds%60).toString().padStart(2,'0');$('timerButton').setAttribute('aria-pressed',String(timer.running));}});
 fullscreen=new JemuFullscreen({document,api,key:new URLSearchParams(location.search).get('window'),onExit:()=>{if(state.presenting)run(leavePresentation)();}});
 state.nativeReady=fullscreen.attach();state.nativeReady.catch(error=>toast(error.message));
-run(async()=>{await refreshDecks();const requested=new URLSearchParams(location.search).get('deck');if(state.decks.length)await openDeck(state.decks.find(deck=>deck.id===requested)||state.decks[0]);else{$('surface').hidden=true;$('emptyState').hidden=false;}})();
+run(async()=>{await refreshDecks();const requested=new URLSearchParams(location.search).get('deck');const readable=state.decks.filter(deck=>!deck.error);if(readable.length)await openDeck(readable.find(deck=>deck.id===requested)||readable[0]);else{$('surface').hidden=true;$('emptyState').hidden=false;}})();

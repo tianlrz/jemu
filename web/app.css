@@ -16,3 +16,4 @@ body.presenting.read-only-content #audienceControls{opacity:1}
 #frame{visibility:hidden}#frame.jemu-ready{visibility:visible}
 #pageNumber{white-space:nowrap;flex-shrink:0}
 #surface[aria-busy="true"]::after{content:'正在准备作品…';position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);background:var(--paper);font-size:12px;pointer-events:none}
+.deck.broken{opacity:.6}.deck.broken span{color:#a0522d}

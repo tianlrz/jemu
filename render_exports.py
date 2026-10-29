@@ -53,6 +53,9 @@ def download(deck,key):
         if job['status']!='completed':raise ValueError('导出尚未完成')
         return job['target'],job['kind']
 
+def unsafe(name,value):
+    return name.startswith('on') or (name in ('href','src','action','xlink:href','formaction') and str(value or '').lstrip().lower().startswith('javascript:'))
+
 VOID={'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}
 class StaticDeck(HTMLParser):
     """Extract explicit stored page groups without executing any template code."""
@@ -64,7 +67,10 @@ class StaticDeck(HTMLParser):
             if tag not in VOID:self.skip+=1
             return
         if self.skip:return
-        if any(name.startswith('on') for name,value in attrs):raise ValueError('静态导出不接受事件处理脚本')
+        # Drop event handlers and javascript: URLs; the static print copy needs neither.
+        if any(unsafe(name,value) for name,value in attrs):
+            attrs=[(name,value) for name,value in attrs if not unsafe(name,value)];values=dict(attrs)
+            raw='<'+tag+''.join(' '+name+('' if value is None else '="'+escape(value,{'"':'&quot;'})+'"') for name,value in attrs)+'>'
         if tag=='base':return
         if 'head' in self.stack or (self.current is None and tag in ('style','title','link','meta')):self.head.append(raw)
         if self.host_depth is None and ('data-jemu-deck' in values or tag=='deck-stage'):
