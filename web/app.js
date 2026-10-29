@@ -206,7 +206,8 @@ function pasteText(value){
     if(payload.schema!=='deckroom.element'||typeof payload.html!=='string')throw Error('剪贴板对象格式无效');
     insertElement(payload);return;
   }
-  const el=doc().createElement('p');el.textContent=value;Object.assign(el.style,{fontFamily:'Microsoft YaHei, Arial, sans-serif',fontSize:'36px',lineHeight:'1.5',color:'#26332f',whiteSpace:'pre-wrap'});
+  // Inherit the page's own font and colour so pasted text stays readable on dark or branded slides.
+  const el=doc().createElement('p');el.textContent=value;Object.assign(el.style,{fontSize:paged()?'36px':'',lineHeight:'1.5',whiteSpace:'pre-wrap'});
   insertElement({html:el.outerHTML,box:{x:120,y:150,width:700,height:Math.max(70,Math.min(600,value.split('\n').length*55))}});
 }
 function bindClipboard(targetDocument){
@@ -230,7 +231,9 @@ function getPosition(el=state.selected) {
   return {x:Number.isFinite(values[0])?values[0]:0,y:Number.isFinite(values[1])?values[1]:0};
 }
 function updatePosition() { const p=getPosition(); $('positionX').value=Math.round(p.x); $('positionY').value=Math.round(p.y); }
-function setPosition(x,y) { if(!state.selected)return; state.selected.style.translate=`${x}px ${y}px`; updatePosition(); selectionRect(); }
+// translate, width and height do not apply to inline boxes such as span/b/a: make them inline-block first.
+function ensureBox(el){if(el.ownerDocument.defaultView.getComputedStyle(el).display==='inline')el.style.display='inline-block';}
+function setPosition(x,y) { if(!state.selected)return; ensureBox(state.selected); state.selected.style.translate=`${x}px ${y}px`; updatePosition(); selectionRect(); }
 function selectionRect() {
   const el=state.selected, box=$('selectionBox');
   if(!state.edit || !el?.isConnected) {box.hidden=true;return;}
@@ -270,7 +273,7 @@ function updatePage(){
   document.body.classList.toggle('read-only-content',!state.canEdit);
   for(const id of ['prevButton','audiencePrev'])$(id).disabled=index<=0;
   for(const id of ['nextButton','audienceNext'])$(id).disabled=index>=total-1;
-  $('modeHint').textContent=state.edit?'单击选中 · 双击改字 · 拖动边框移动':pages?'← → 翻页 · 点击「轻编辑」修改':'自由网页 · 保留滚动和原生交互';
+  $('modeHint').textContent=state.edit?'单击选中 · 拖动对象移动 · 双击改字':pages?'← → 翻页 · 点击「轻编辑」修改':'自由网页 · 保留滚动和原生交互';
   selectionRect();presentation?.sync();
 }
 function navigate(delta){goTo(currentIndex()+delta);}
@@ -334,7 +337,7 @@ function setEdit(enabled) {
   if(enabled&&!state.canEdit)return toast('此页面可展示；直接编辑仅支持稿件目录内的 HTML 页面');
   commitText();state.edit=enabled;
   $('editButton').setAttribute('aria-pressed',String(enabled));
-  $('modeHint').textContent=enabled?'单击选中 · 双击改字 · 拖动边框移动':'单击选中 · 双击改字 · ← → 翻页';
+  $('modeHint').textContent=enabled?'单击选中 · 拖动对象移动 · 双击改字':'单击选中 · 双击改字 · ← → 翻页';
   const d=doc();if(d)d.documentElement.dataset.deckroomEdit=enabled?'true':'false';
   if(enabled)setPanel('edit');else{clearSelection();if(state.panel==='edit')setPanel(null);}
   updatePage();
@@ -344,7 +347,8 @@ function renderDecks() {
   for(const item of state.decks) {
     const button=document.createElement('button');button.className='deck'+(state.deck?.id===item.id?' active':'');
     const title=document.createElement('div');title.textContent=item.name;
-    const detail=document.createElement('span');detail.textContent=`${item.versions.length} 个版本 · HTML`;
+    const detail=document.createElement('span');detail.textContent=item.error?'无法读取：'+item.error:`${item.versions.length} 个版本 · HTML`;
+    if(item.error){button.title=item.error;button.classList.add('broken');}
     button.append(title,detail);button.onclick=run(()=>openDeck(item));$('decks').append(button);
   }
 }
@@ -405,10 +409,11 @@ frame.addEventListener('load',async()=>{
   clearSelection();
   attachPureDocument();
   if(stage()&&Number.isInteger(state.page))stage().goTo(state.page);
-  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important}';d.head.append(style);
+  const style=d.createElement('style');style.dataset.deckroomUi='true';style.textContent='[data-deckroom-inline]{outline:2px solid #3c947c;outline-offset:4px;cursor:text!important;white-space:pre-wrap!important;text-transform:none!important}html[data-deckroom-edit="true"] body *{-webkit-user-select:none;user-select:none}html[data-deckroom-edit="true"] [data-deckroom-inline],html[data-deckroom-edit="true"] [data-deckroom-inline] *{-webkit-user-select:text;user-select:text}';d.head.append(style);
   // The workspace supplies navigation; keep the slide's own controls for standalone presentation only.
   if(stage()?.shadowRoot){const controls=d.createElement('style');controls.textContent='.overlay,.tapzones{display:none!important}';stage().shadowRoot.append(controls);}
   d.addEventListener('click',event=>{
+    if(state.suppressClick){state.suppressClick=false;event.preventDefault();event.stopImmediatePropagation();return;}
     const target=event.target instanceof frame.contentWindow.Element?event.target:null;
     if(!target)return;
     if(target.hasAttribute('data-deckroom-ui')||target.hasAttribute('data-jemu-canvas')){if(!state.presenting)clearSelection();return;}
@@ -418,6 +423,18 @@ frame.addEventListener('load',async()=>{
     event.preventDefault();event.stopImmediatePropagation();
     const el=target.closest('[data-node-id],[data-slot],[data-role],h1,h2,h3,p,span,b,strong,em,a,li,article,figure,img,td,th,div');select(el);frame.contentWindow.focus();
   },true);
+  // Drag the selected object itself, like presentation software; a click without movement still selects inside it.
+  d.addEventListener('pointerdown',event=>{
+    state.suppressClick=false;
+    const el=state.selected;
+    if(!state.edit||state.presenting||event.button!==0||state.inline||!el||!el.contains(event.target))return;
+    const before=elementSnapshot(el),p=getPosition(el),x=event.clientX,y=event.clientY,canvas=designCanvas()?.getBoundingClientRect(),scale=canvas?canvas.width/designSize().width:1;
+    let moved=false;event.target.setPointerCapture?.(event.pointerId);
+    const move=e=>{if(!moved&&Math.hypot(e.clientX-x,e.clientY-y)<4)return;moved=true;e.preventDefault();setPosition(Math.round(p.x+(e.clientX-x)/scale),Math.round(p.y+(e.clientY-y)/scale));};
+    const end=()=>{d.removeEventListener('pointermove',move,true);d.removeEventListener('pointerup',end,true);d.removeEventListener('pointercancel',end,true);if(moved){state.suppressClick=true;record(el,before,'move');}};
+    d.addEventListener('pointermove',move,true);d.addEventListener('pointerup',end,true);d.addEventListener('pointercancel',end,true);
+  },true);
+  d.addEventListener('dragstart',event=>{if(state.edit&&!state.presenting)event.preventDefault();},true);
   d.addEventListener('dblclick',event=>{if(state.presenting||!state.edit)return;const el=event.target.closest?.('h1,h2,h3,p,span,b,strong,em,a,li,td,th,[data-node-id]');if(!textLeaf(el))return;event.preventDefault();select(el);beginInline(el,true);},true);
   d.addEventListener('input',event=>{if(state.inline?.el!==event.target)return;const active=state.inline;if(!state.pendingText)state.pendingText={el:active.el,before:active.before};active.changed=true;$('textValue').value=active.el.innerText;updateDirty();selectionRect();},true);
   d.addEventListener('blur',event=>{if(state.inline?.el===event.target)commitText();},true);
@@ -643,7 +660,7 @@ $('selectionBox').addEventListener('pointerdown',event=>{
     const west=direction.includes('w'),north=direction.includes('n');
     let width=Math.max(16,before.box.width+(west?-dx:direction.includes('e')?dx:0)),height=Math.max(16,before.box.height+(north?-dy:direction.includes('s')?dy:0));
     if(direction.length===2&&(e.shiftKey||['IMG','SVG'].includes(el.tagName))){const ratio=before.box.width/before.box.height;if(Math.abs(dx)>Math.abs(dy)*ratio)height=width/ratio;else width=height*ratio;}
-    Object.assign(el.style,{width:Math.round(width)+'px',height:Math.round(height)+'px',boxSizing:'border-box',minWidth:'0',minHeight:'0',maxWidth:'none',maxHeight:'none'});
+    ensureBox(el);Object.assign(el.style,{width:Math.round(width)+'px',height:Math.round(height)+'px',boxSizing:'border-box',minWidth:'0',minHeight:'0',maxWidth:'none',maxHeight:'none'});
     setPosition(p.x+(west?before.box.width-width:0),p.y+(north?before.box.height-height:0));
   };
   const end=e=>{handle.releasePointerCapture(e.pointerId);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);record(el,before,direction==='move'?'move':'resize');};
@@ -682,7 +699,7 @@ function chooseFiles(files,folder) {
   const preferred=html.find(item=>/^(index|reference)\.html?$/i.test(item.path));if(preferred)$('entrySelect').value=preferred.path;
   $('importName').value=folder?prefix.slice(0,-1):(first?.name||'').replace(/\.html?$/i,'');
   const size=state.importing.reduce((n,item)=>n+item.file.size,0);
-  $('importSummary').textContent=`${state.importing.length} 个文件 · ${(size/1024/1024).toFixed(1)} MB`+(html.length?'':' · 未找到 HTML');
+  $('importSummary').textContent=`${state.importing.length} 个文件 · ${(size/1024/1024).toFixed(1)} MB`+(html.length?'':' · 未找到 HTML')+(size>100*1024*1024?' · 超过 100 MB 上限，请移走视频等大文件后再导入':'');
   $('confirmImport').disabled=!html.length||size>100*1024*1024;
 }
 $('folderInput').onchange=event=>chooseFiles(event.target.files,true);$('htmlInput').onchange=event=>chooseFiles(event.target.files,false);
@@ -707,4 +724,4 @@ $('stopButton').onclick=run(async()=>{commitText();if(state.dirty&&!confirm('还
 presentation=new DeckroomPresentation({read:presentationState,navigate,goTo,exit:leavePresentation,restart:async()=>{await resetPresentation();presentation.start(true);},saveNotes:saveSpeakerNotes,onConnection:connected=>{document.body.dataset.presenterConnected=String(connected);$('notesButton').textContent=connected?'演讲者已连接 ↗':'演讲者窗口 ↗';$('audiencePresenter').textContent=connected?'演讲者已连接 ↗':'演讲者窗口 ↗';},onTick:timer=>{const seconds=Math.floor(timer.elapsedMs/1000);$('timerButton').textContent=Math.floor(seconds/60).toString().padStart(2,'0')+':'+(seconds%60).toString().padStart(2,'0');$('timerButton').setAttribute('aria-pressed',String(timer.running));}});
 fullscreen=new JemuFullscreen({document,api,key:new URLSearchParams(location.search).get('window'),onExit:()=>{if(state.presenting)run(leavePresentation)();}});
 state.nativeReady=fullscreen.attach();state.nativeReady.catch(error=>toast(error.message));
-run(async()=>{await refreshDecks();const requested=new URLSearchParams(location.search).get('deck');if(state.decks.length)await openDeck(state.decks.find(deck=>deck.id===requested)||state.decks[0]);else{$('surface').hidden=true;$('emptyState').hidden=false;}})();
+run(async()=>{await refreshDecks();const requested=new URLSearchParams(location.search).get('deck');const readable=state.decks.filter(deck=>!deck.error);if(readable.length)await openDeck(readable.find(deck=>deck.id===requested)||readable[0]);else{$('surface').hidden=true;$('emptyState').hidden=false;}})();

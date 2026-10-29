@@ -114,7 +114,7 @@ class CLITest(unittest.TestCase):
     def test_lifecycle_in_separate_application_copy(self):
         # Never point start/stop at the real application's runtime or library.
         app=self.root/'isolated-app';app.mkdir();(app/'web').mkdir()
-        for name in ('jemu.py','server.py','automation.py','native_window.py','rendered_pages.py','render_exports.py','edit_exports.py','cloud_archives.py','webdav_store.py','credentials.py'):shutil.copy2(ROOT/name,app/name)
+        for name in ('jemu.py','server.py','automation.py','native_window.py','rendered_pages.py','render_exports.py','edit_exports.py','cloud_archives.py','webdav_store.py','credentials.py','version_store.py'):shutil.copy2(ROOT/name,app/name)
         shutil.copy2(ROOT/'web/index.html',app/'web/index.html')
         def run(*args):
             result=subprocess.run([sys.executable,str(app/'jemu.py'),'--json',*args],capture_output=True,text=True,encoding='utf8',timeout=15)

@@ -8,6 +8,7 @@ import re
 import socket
 import ssl
 import tempfile
+import threading
 from urllib.parse import quote, unquote, urlparse
 import xml.etree.ElementTree as ET
 
@@ -16,6 +17,8 @@ from cloud_archives import CHUNK, MAX_ARCHIVE_BYTES, MAX_MANIFEST
 NUTSTORE_URL = 'https://dav.jianguoyun.com/dav/'
 UPLOAD_LIMIT = 450 * 1024 * 1024
 _INDEX_CACHE = {}
+# Requests to the cloud run outside the server's global lock.
+_INDEX_LOCK = threading.Lock()
 
 
 class WebDAVError(ValueError):
@@ -129,7 +132,8 @@ class NutstoreArchiveStore:
 
     def read_index(self, relative, archive_id):
         key=(self.url.netloc,self.username,relative)
-        if key in _INDEX_CACHE:return _INDEX_CACHE[key]
+        with _INDEX_LOCK:
+            if key in _INDEX_CACHE:return _INDEX_CACHE[key]
         with self.response('GET',relative) as response:raw=response.read(16385)
         if len(raw)>16384:raise WebDAVError('云端存档索引过大')
         try:value=json.loads(raw)
@@ -137,8 +141,9 @@ class NutstoreArchiveStore:
         if not isinstance(value,dict) or value.get('id')!=archive_id or not all(isinstance(value.get(key),str) for key in ('name','created')) or not all(isinstance(value.get(key),int) for key in ('bytes','versionCount')):
             raise WebDAVError('云端存档索引格式无效')
         result={key:value[key] for key in ('id','name','created','bytes','versionCount')}
-        while len(_INDEX_CACHE)>=100:del _INDEX_CACHE[next(iter(_INDEX_CACHE))]
-        _INDEX_CACHE[key]=result
+        with _INDEX_LOCK:
+            while len(_INDEX_CACHE)>=100:del _INDEX_CACHE[next(iter(_INDEX_CACHE))]
+            _INDEX_CACHE[key]=result
         return result
 
     def list(self, limit=50, offset=0, month=None):

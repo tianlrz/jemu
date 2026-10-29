@@ -10,7 +10,7 @@ async function api(path,body){
 async function openDeck(meta){state.deck=meta;state.revision=meta.revision;$('backupDeck').value=meta.id;cloudControls();}
 async function refreshDecks(preferred){
   const selected=preferred||state.deck?.id||new URLSearchParams(location.search).get('deck');
-  state.decks=await api('/api/decks');$('backupDeck').replaceChildren();
+  state.decks=(await api('/api/decks')).filter(meta=>!meta.error);$('backupDeck').replaceChildren();
   if(!state.decks.length){const option=new Option('还没有作品','');$('backupDeck').append(option);state.deck=null;cloudControls();return;}
   for(const meta of state.decks)$('backupDeck').append(new Option(meta.name,meta.id));
   await openDeck(state.decks.find(meta=>meta.id===selected)||state.decks[0]);

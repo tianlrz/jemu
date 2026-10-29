@@ -7,6 +7,8 @@ import re
 import zipfile
 from pathlib import Path
 
+from version_store import Version
+
 TEXT_TYPES = {"html", "htm", "css", "js", "json", "md", "svg", "txt"}
 SCOPES = {"current": "仅当前元素／页面", "similar": "检查语义或结构相近的页面", "all": "检查全稿一致性"}
 
@@ -18,8 +20,8 @@ def fenced(text, language=""):
 
 def build_artifacts(meta, directory, current_files, context, created):
     baseline = meta["versions"][0]
-    with zipfile.ZipFile(directory / "versions" / (baseline["id"] + ".zip")) as archive:
-        originals = {item.filename: item for item in archive.infolist() if not item.is_dir()}
+    with Version(directory / "versions" / (baseline["id"] + ".zip"), directory / "versions" / "blobs") as archive:
+        originals = archive.sizes()
         return _build_artifacts(meta, directory, current_files, context, created, baseline, archive, originals)
 
 
@@ -53,9 +55,9 @@ def _build_artifacts(meta, directory, current_files, context, created, baseline,
     patches, inventory = [], []
     diff_bytes = 0
     for name in sorted(original.keys() | current_files.keys()):
-        item, current = original.get(name), current_files.get(name)
-        with archive.open(item) if item else io.BytesIO() as source:
-            before_hash = stream_hash(source) if item else None
+        known, current = name in original, current_files.get(name)
+        with archive.open(name) if known else io.BytesIO() as source:
+            before_hash = stream_hash(source) if known else None
         if isinstance(current, Path):
             with current.open('rb') as source:
                 after_hash = stream_hash(source)
@@ -63,18 +65,18 @@ def _build_artifacts(meta, directory, current_files, context, created, baseline,
         else:
             after_hash = hashlib.sha256(current).hexdigest() if current is not None else None
             after_size = len(current or b'')
-        status = "added" if item is None else "deleted" if current is None else "unchanged" if before_hash == after_hash else "modified"
+        status = "added" if not known else "deleted" if current is None else "unchanged" if before_hash == after_hash else "modified"
         inventory.append({"path": name, "status": status,
                           "beforeSha256": before_hash, "afterSha256": after_hash})
         if status == "unchanged":
             continue
         patch = {"path": name, "status": status}
         # Bound text diffs for decks with large embedded images; list every omitted file explicitly.
-        if name.rsplit(".", 1)[-1].lower() not in TEXT_TYPES or max(item.file_size if item else 0, after_size) > 2 * 1024 * 1024:
+        if name.rsplit(".", 1)[-1].lower() not in TEXT_TYPES or max(original[name] if known else 0, after_size) > 2 * 1024 * 1024:
             patch["note"] = "图片、二进制或大文件的内容未包含；请使用完整编辑包获取当前文件。"
         else:
             try:
-                before = archive.read(item) if item else b''
+                before = archive.read(name) if known else b''
                 after = current.read_bytes() if isinstance(current, Path) else current or b''
                 before_text, after_text = (before or b"").decode("utf-8-sig"), (after or b"").decode("utf-8-sig")
                 diff = "\n".join(difflib.unified_diff(before_text.splitlines(), after_text.splitlines(), fromfile="original/" + name, tofile="document/" + name, lineterm=""))

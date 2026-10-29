@@ -28,6 +28,7 @@ from edit_exports import build_artifacts, full_bundle
 from cloud_archives import FolderArchiveStore, create_archive, restore_archive
 from credentials import load_secret, save_secret
 from webdav_store import NutstoreArchiveStore, NUTSTORE_URL
+from version_store import Version, write_snapshot
 
 ROOT = Path(__file__).resolve().parent
 VERSION = (ROOT/'VERSION').read_text(encoding='utf8').strip() if (ROOT/'VERSION').is_file() else 'dev'
@@ -183,7 +184,8 @@ def snapshot(directory, label, changes=None, *, force=False):
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix('.zip.tmp')
     try:
-        archive_document(directory, temporary)
+        # Assets of 64 KiB or more are kept once in versions/blobs, not copied into every version.
+        write_snapshot(directory / "document", tree_files(directory / "document"), temporary, directory / "versions" / "blobs")
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
@@ -209,6 +211,38 @@ def public_meta(directory, meta):
     versions = [{k: v for k, v in item.items() if k != 'changes'} for item in meta['versions']]
     return {**meta, "versions": versions, "path": str(directory / "document"), "entryPath": str(directory / "document" / meta["entry"]),
             "requestPath": str(directory / "ai-request.md"), "exportContext": context, "url": f"/documents/{meta['id']}/{quote(meta['entry'], safe='/')}"}
+
+
+def list_decks():
+    # One damaged or oversized deck must not hide the whole library.
+    items = []
+    for path in DATA.glob("*/meta.json"):
+        directory = path.parent
+        try:
+            items.append(public_meta(directory, current_meta(directory)))
+        except (KeyError, ValueError, OSError, zipfile.BadZipFile) as error:
+            try:
+                meta = read_meta(directory)
+            except (ValueError, OSError):
+                meta = {}
+            items.append({"id": directory.name, "name": str(meta.get("name") or directory.name), "updated": str(meta.get("updated", "")),
+                          "versions": [], "error": str(error) or "稿件无法读取", "path": str(directory / "document")})
+    return sorted(items, key=lambda m: m.get("updated", ""), reverse=True)
+
+
+def deck_filename(directory):
+    try:
+        name = str(read_meta(directory).get("name") or "")
+    except (ValueError, OSError):
+        name = ""
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", name).strip(" .")[:80]
+    return name or "jemu-deck"
+
+
+def attachment(name):
+    # ASCII fallback plus RFC 5987 UTF-8 name, so Chinese deck names survive the download.
+    fallback = name if re.fullmatch(r'[A-Za-z0-9._ -]+', name) else "jemu-deck" + ("." + name.rsplit(".", 1)[1] if "." in name else "")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(name, safe='')}"
 
 
 def create_deck(name, entry, files):
@@ -275,81 +309,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"error": "只允许本机访问"}, 403)
             path = unquote(urlparse(self.path).path)
             parts = path.strip("/").split("/")
+            # Streaming files and cloud requests stay outside the global lock: a paused
+            # video or a slow network must not block saving, polling or other assets.
+            if len(parts) >= 3 and parts[0] == "documents":
+                return self.send_document(path, parts)
+            if path == '/api/cloud/archives':
+                query = parse_qs(urlparse(self.path).query)
+                offset = max(0, min(10000, int(query.get('offset', ['0'])[0])))
+                with LOCK:
+                    store = cloud_store()
+                if store.provider == 'nutstore':
+                    return self.send(store.list(offset=offset, month=query.get('month', [None])[0]))
+                return self.send(store.list(offset=offset))
             with LOCK:
-                if path == "/api/health":
-                    return self.send({"ok": True, "app": "deckroom", "name": "Jemu", "displayName": "简幕", "version":VERSION,"library": str(DATA)})
-                if path == '/api/capabilities':return self.send(automation.capabilities())
-                if path == '/api/render-capabilities':return self.send(render_exports.capabilities())
-                if path == '/api/window/status':return self.send(native_window.status(parse_qs(urlparse(self.path).query).get('window',[''])[0]))
-                if path == '/api/settings':return self.send({'backup':public_cloud_config()})
-                if path == '/api/settings/revision':return self.send({'revision':cloud_config_revision()})
-                if path == '/api/ui/state':return self.send({'clients':automation.clients()})
-                if path.startswith('/api/ui/commands/'):
-                    return self.send(automation.result(parts[-1]))
-                if path == "/api/decks":
-                    items = [public_meta(p.parent, current_meta(p.parent)) for p in DATA.glob("*/meta.json")]
-                    return self.send(sorted(items, key=lambda m: m.get("updated", ""), reverse=True))
-                if path in ('/api/cloud/config','/api/settings/backup'):
-                    return self.send(public_cloud_config())
-                if path == '/api/cloud/archives':
-                    query = parse_qs(urlparse(self.path).query)
-                    offset = max(0, min(10000, int(query.get('offset', ['0'])[0])))
-                    store=cloud_store()
-                    if store.provider=='nutstore':
-                        return self.send(store.list(offset=offset,month=query.get('month',[None])[0]))
-                    return self.send(store.list(offset=offset))
-                if len(parts) >= 3 and parts[:2] == ["api", "decks"]:
-                    directory = deck_dir(parts[2])
-                    if len(parts) in (5,6) and parts[3]=='render-jobs':
-                        if len(parts)==5:return self.send(render_exports.status(parts[2],parts[4]))
-                        if parts[5]=='download':
-                            target,kind=render_exports.download(parts[2],parts[4])
-                            mime='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-                            return self.send_file(target,mime,'attachment; filename="jemu-deck.'+kind+'"')
-                    if len(parts)==4 and parts[3]=='files':
-                        return self.send({'revision':revision(directory),'files':[{'path':p.relative_to(directory/'document').as_posix(),'bytes':p.stat().st_size} for p in tree_files(directory/'document')]})
-                    if len(parts)==4 and parts[3]=='rendered-pages':
-                        meta=current_meta(directory);entry=parse_qs(urlparse(self.path).query).get('entry',[meta['entry']])[0]
-                        target=safe_child(directory/'document',entry)
-                        if target.suffix.lower() not in ('.html','.htm'):raise ValueError('只能恢复 HTML 页面')
-                        return self.send(recover_rendered_pages(directory,meta,target.relative_to(directory/'document').as_posix()))
-                    if len(parts)==4 and parts[3]=='file':
-                        name=parse_qs(urlparse(self.path).query).get('path',[''])[0]
-                        return self.send_file(safe_child(directory/'document',name),'application/octet-stream')
-                    if len(parts) == 4 and parts[3] in ('download-full', 'download-trace'):
-                        full = parts[3] == 'download-full'
-                        name = 'jemu-full.zip' if full else 'jemu-edits.md'
-                        return self.send_file(directory / 'exports' / name, 'application/zip' if full else 'text/markdown; charset=utf-8', 'attachment; filename="' + name + '"')
-                    if len(parts) == 4 and parts[3] == 'status':
-                        return self.send({'id': parts[2], 'revision': revision(directory)})
-                    meta = current_meta(directory)
-                    if len(parts) == 4 and parts[3] == "export":
-                        with tempfile.TemporaryDirectory(prefix='jemu-export-') as temp:
-                            target = Path(temp) / 'jemu-deck.zip'
-                            archive_document(directory, target)
-                            return self.send_file(target, 'application/zip', 'attachment; filename="jemu-deck.zip"')
-                    if len(parts)==3:return self.send(public_meta(directory, meta))
-                    return self.send({'error':'未找到接口'},404)
-                if len(parts) >= 3 and parts[0] == "documents":
-                    directory = deck_dir(parts[1])
-                    target = safe_child(directory / "document", "/".join(parts[2:]))
-                    if target.is_dir():
-                        target = next((target / name for name in ('index.html', 'index.htm') if (target / name).is_file()), target / 'index.html')
-                        if not path.endswith('/'):
-                            self.send_response(301);self.send_header('Location', quote(path, safe='/') + '/');self.send_header('Content-Length','0');self.end_headers();return
-                    mime = content_mime(target)
-                    # Preserve BOM/meta/@charset detection for imported legacy documents.
-                    return self.send_file(target, mime)
-                if path in ("/", "/index.html", "/settings", "/settings.html"):
-                    page='settings.html' if path in ('/settings','/settings.html') else 'index.html'
-                    raw = (ROOT / "web" / page).read_text(encoding="utf-8").replace("__SESSION_TOKEN__", TOKEN)
-                    window_key=parse_qs(urlparse(self.path).query).get('window',[''])[0]
-                    if page=='index.html' and window_key in native_window.WINDOWS:raw=raw.replace('<title>Jemu · 简幕</title>','<title>'+native_window.title(window_key)+'</title>')
-                    return self.send(raw.encode("utf-8"), content_type="text/html; charset=utf-8")
-                if path in ("/app.js", "/app.css", "/resources.js", "/compat.js", "/dynamic-deck.js", "/export-layout.js", "/fullscreen.js", "/cloud.js", "/automation.js", "/settings.js", "/settings.css", "/presenting.js", "/presenter.html", "/presenter.js", "/presenter.css"):
-                    target = ROOT / "web" / path.lstrip("/")
-                    return self.send(target.read_bytes(), content_type=content_mime(target) + "; charset=utf-8")
-                self.send({"error": "未找到文件"}, 404)
+                pending = self.get_locked(path, parts)
+            if pending:
+                target, mime, disposition, cleanup = pending
+                try:
+                    self.send_file(target, mime, disposition)
+                finally:
+                    if cleanup:
+                        cleanup()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             self.close_connection = True
         except FileNotFoundError:
@@ -357,10 +337,83 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as error:
             self.send({"error": str(error)}, 400)
 
+    def send_document(self, path, parts):
+        directory = deck_dir(parts[1])
+        target = safe_child(directory / "document", "/".join(parts[2:]))
+        if target.is_dir():
+            target = next((target / name for name in ('index.html', 'index.htm') if (target / name).is_file()), target / 'index.html')
+            if not path.endswith('/'):
+                self.send_response(301);self.send_header('Location', quote(path, safe='/') + '/');self.send_header('Content-Length','0');self.end_headers();return
+        # Preserve BOM/meta/@charset detection for imported legacy documents.
+        return self.send_file(target, content_mime(target))
+
+    def get_locked(self, path, parts):
+        """Answer small requests directly; return (path, mime, disposition, cleanup) for files sent after unlocking."""
+        if path == "/api/health":
+            return self.send({"ok": True, "app": "deckroom", "name": "Jemu", "displayName": "简幕", "version":VERSION,"library": str(DATA)})
+        if path == '/api/capabilities':return self.send(automation.capabilities())
+        if path == '/api/render-capabilities':return self.send(render_exports.capabilities())
+        if path == '/api/window/status':return self.send(native_window.status(parse_qs(urlparse(self.path).query).get('window',[''])[0]))
+        if path == '/api/settings':return self.send({'backup':public_cloud_config()})
+        if path == '/api/settings/revision':return self.send({'revision':cloud_config_revision()})
+        if path == '/api/ui/state':return self.send({'clients':automation.clients()})
+        if path.startswith('/api/ui/commands/'):
+            return self.send(automation.result(parts[-1]))
+        if path == "/api/decks":
+            return self.send(list_decks())
+        if path in ('/api/cloud/config','/api/settings/backup'):
+            return self.send(public_cloud_config())
+        if len(parts) >= 3 and parts[:2] == ["api", "decks"]:
+            directory = deck_dir(parts[2])
+            if len(parts) in (5,6) and parts[3]=='render-jobs':
+                if len(parts)==5:return self.send(render_exports.status(parts[2],parts[4]))
+                if parts[5]=='download':
+                    target,kind=render_exports.download(parts[2],parts[4])
+                    mime='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                    return target,mime,attachment(deck_filename(directory)+'.'+kind),None
+            if len(parts)==4 and parts[3]=='files':
+                return self.send({'revision':revision(directory),'files':[{'path':p.relative_to(directory/'document').as_posix(),'bytes':p.stat().st_size} for p in tree_files(directory/'document')]})
+            if len(parts)==4 and parts[3]=='rendered-pages':
+                meta=current_meta(directory);entry=parse_qs(urlparse(self.path).query).get('entry',[meta['entry']])[0]
+                target=safe_child(directory/'document',entry)
+                if target.suffix.lower() not in ('.html','.htm'):raise ValueError('只能恢复 HTML 页面')
+                return self.send(recover_rendered_pages(directory,meta,target.relative_to(directory/'document').as_posix()))
+            if len(parts)==4 and parts[3]=='file':
+                name=parse_qs(urlparse(self.path).query).get('path',[''])[0]
+                return safe_child(directory/'document',name),'application/octet-stream',None,None
+            if len(parts) == 4 and parts[3] in ('download-full', 'download-trace'):
+                full = parts[3] == 'download-full'
+                name = 'jemu-full.zip' if full else 'jemu-edits.md'
+                suffix = '-full.zip' if full else '-edits.md'
+                return directory / 'exports' / name, 'application/zip' if full else 'text/markdown; charset=utf-8', attachment(deck_filename(directory)+suffix), None
+            if len(parts) == 4 and parts[3] == 'status':
+                return self.send({'id': parts[2], 'revision': revision(directory)})
+            meta = current_meta(directory)
+            if len(parts) == 4 and parts[3] == "export":
+                temp = tempfile.TemporaryDirectory(prefix='jemu-export-')
+                try:
+                    target = Path(temp.name) / 'jemu-deck.zip'
+                    archive_document(directory, target)
+                except BaseException:
+                    temp.cleanup();raise
+                return target, 'application/zip', attachment(deck_filename(directory)+'.zip'), temp.cleanup
+            if len(parts)==3:return self.send(public_meta(directory, meta))
+            return self.send({'error':'未找到接口'},404)
+        if path in ("/", "/index.html", "/settings", "/settings.html"):
+            page='settings.html' if path in ('/settings','/settings.html') else 'index.html'
+            raw = (ROOT / "web" / page).read_text(encoding="utf-8").replace("__SESSION_TOKEN__", TOKEN)
+            window_key=parse_qs(urlparse(self.path).query).get('window',[''])[0]
+            if page=='index.html' and window_key in native_window.WINDOWS:raw=raw.replace('<title>Jemu · 简幕</title>','<title>'+native_window.title(window_key)+'</title>')
+            return self.send(raw.encode("utf-8"), content_type="text/html; charset=utf-8")
+        if path in ("/app.js", "/app.css", "/resources.js", "/compat.js", "/dynamic-deck.js", "/export-layout.js", "/fullscreen.js", "/cloud.js", "/automation.js", "/settings.js", "/settings.css", "/presenting.js", "/presenter.html", "/presenter.js", "/presenter.css"):
+            target = ROOT / "web" / path.lstrip("/")
+            return self.send(target.read_bytes(), content_type=content_mime(target) + "; charset=utf-8")
+        self.send({"error": "未找到文件"}, 404)
+
     def do_POST(self):
-        # Serialize body decoding too: concurrent large requests must not multiply RAM use.
-        with LOCK:
-            self.post_locked()
+        # Local work is serialized under LOCK inside post_locked; cloud transfers are not,
+        # so a slow upload does not freeze the workspace.
+        self.post_locked()
 
     def send_file(self, path, content_type, disposition=None):
         with path.open('rb') as stream:
@@ -407,13 +460,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"error": "文件过大"}, 413)
             parts = urlparse(self.path).path.strip("/").split("/")
             if len(parts)==4 and parts[:2]==['api','decks'] and parts[3]=='file':
-                return self.write_document_file(parts[2],length)
+                with LOCK:
+                    return self.write_document_file(parts[2],length)
             if parts == ['api', 'import-file']:
-                return self.import_file(length)
+                with LOCK:
+                    return self.import_file(length)
             if length > 16 * 1024 * 1024:
                 return self.send({'error': '请求超过 16 MB。大稿件请使用新版界面逐文件导入。'}, 413)
-            data = json.loads(self.rfile.read(length) or b"{}")
+            # Serialize body decoding too: concurrent large requests must not multiply RAM use.
+            with LOCK:
+                data = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(data,dict):raise ValueError('请求内容必须是 JSON 对象')
+            if parts in (['api','cloud','test'],['api','cloud','restore']) or (len(parts)==4 and parts[:2]==['api','decks'] and parts[3]=='cloud-backup'):
+                if data.get('expectedSettingsRevision') and data['expectedSettingsRevision']!=cloud_config_revision():
+                    return self.send({'error':'设置已在 CLI 或其他窗口中改变，请重新打开设置再操作'},409)
+                return self.cloud_transfer(parts, data)
             with LOCK:
                 if parts==['api','window','attach']:return self.send(native_window.attach(data.get('window')))
                 if parts==['api','window','fullscreen']:return self.send(native_window.fullscreen(data.get('window'),data.get('enabled')))
@@ -452,15 +513,6 @@ class Handler(BaseHTTPRequestHandler):
                     (DATA/'.settings'/'webdav.secret').unlink(missing_ok=True)
                     atomic_json(DATA/'.settings'/'cloud.json',{'provider':'nutstore','folder':'','username':''})
                     return self.send(public_cloud_config())
-                if parts == ['api','cloud','test']:
-                    store=cloud_store()
-                    return self.send(store.test() if store.provider=='nutstore' else {'ok':True,'message':'同步目录可以访问。云端上传由云盘客户端负责。'})
-                if parts == ['api', 'cloud', 'restore']:
-                    store = cloud_store()
-                    if store.provider=='nutstore':
-                        with store.materialize(data.get('archive')) as source:directory,meta=restore_archive(source,DATA,safe_child,revision)
-                    else:directory, meta = restore_archive(store.path(data.get('archive')), DATA, safe_child, revision)
-                    return self.send(public_meta(directory, meta), 201)
                 if parts == ['api', 'cloud', 'open-folder']:
                     store = cloud_store()
                     if store.provider=='nutstore':return self.send({'error':'WebDAV 存档请在云端列表中查看'},400)
@@ -507,7 +559,7 @@ class Handler(BaseHTTPRequestHandler):
                 directory = deck_dir(parts[2])
                 action = parts[3]
                 meta = current_meta(directory)
-                if action in ("render-start", "prepare", "save", "restore", "export-edit", "cloud-backup", "delete-file") and data.get("baseRevision") != meta["revision"]:
+                if action in ("render-start", "prepare", "save", "restore", "export-edit", "delete-file") and data.get("baseRevision") != meta["revision"]:
                     return self.send({"error": "文件已在外部更新。请先载入外部版本，避免覆盖。", "meta": public_meta(directory, meta)}, 409)
                 if action=='delete-file':
                     name=data.get('path','')
@@ -518,18 +570,6 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(public_meta(directory,snapshot(directory,'CLI 删除文件：'+name)))
                 if action=='render-start':
                     return self.send(render_exports.start(directory,meta,data,tree_files(directory/'document'),safe_child,lambda:revision(directory)),202)
-                if action == 'cloud-backup':
-                    store = cloud_store()
-                    archive_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + secrets.token_hex(6) + '.jemu.zip'
-                    with tempfile.TemporaryDirectory(prefix='jemu-archive-') as temp:
-                        target = Path(temp) / archive_id
-                        manifest = create_archive(directory, target, meta)
-                        # External AI can write without our lock; do not publish an inconsistent archive.
-                        if revision(directory) != meta['revision']:
-                            raise ValueError('备份期间原稿有外部修改，请载入后重试')
-                        stored = store.put(target, archive_id, manifest)
-                        if isinstance(stored,dict):return self.send(stored)
-                    return self.send({'id': archive_id, 'versionCount': manifest['versionCount'], 'bytes': stored.stat().st_size, 'status': 'written-to-sync-folder', 'remoteStatus': 'unknown'})
                 if action == 'view-mode':
                     mode = data.get('mode')
                     if mode not in ('auto', 'native', 'slides'):
@@ -574,27 +614,43 @@ class Handler(BaseHTTPRequestHandler):
                     version = next((v for v in meta["versions"] if v["id"] == data.get("version")), None)
                     if not version:
                         raise ValueError("未找到此版本")
-                    with zipfile.ZipFile(directory / "versions" / (version["id"] + ".zip")) as archive:
-                        # Validate and stage before replacing the live document; keep the replaced tree recoverable.
+                    with Version(directory / "versions" / (version["id"] + ".zip"), directory / "versions" / "blobs") as archive:
+                        # Validate and stage before replacing the live document.
                         staged = Path(tempfile.mkdtemp(prefix="restore-", dir=directory))
-                        total = 0
-                        for item in archive.infolist():
-                            target = safe_child(staged, item.filename)
-                            total += item.file_size
-                            if total > MAX_BYTES:
-                                raise ValueError("版本文件过大")
-                            if not item.is_dir():
+                        try:
+                            total = 0
+                            for name, size in archive.sizes().items():
+                                target = safe_child(staged, name)
+                                total += size
+                                if total > MAX_BYTES:
+                                    raise ValueError("版本文件过大")
                                 target.parent.mkdir(parents=True, exist_ok=True)
-                                with archive.open(item) as source, target.open('wb') as dest:
+                                with archive.open(name) as source, target.open('wb') as dest:
                                     shutil.copyfileobj(source, dest, 64 * 1024)
+                        except BaseException:
+                            shutil.rmtree(staged, ignore_errors=True)
+                            raise
                     old = directory / ("replaced-" + secrets.token_hex(6))
-                    (directory / "document").rename(old)
+                    # Files are streamed outside LOCK; on Windows an open media request blocks the rename briefly.
+                    for attempt in range(20):
+                        try:
+                            (directory / "document").rename(old)
+                            break
+                        except PermissionError:
+                            if attempt == 19:
+                                shutil.rmtree(staged, ignore_errors=True)
+                                raise ValueError("稿件文件正被预览占用，请暂停视频或稍后重试")
+                            time.sleep(0.1)
                     try:
                         staged.rename(directory / "document")
                     except OSError:
                         old.rename(directory / "document")
+                        shutil.rmtree(staged, ignore_errors=True)
                         raise
                     meta = snapshot(directory, "恢复至 " + version["created"])
+                    # The replaced tree matched the latest version (current_meta snapshots external edits
+                    # first), so once the restore is recorded this full copy is redundant.
+                    shutil.rmtree(old, ignore_errors=True)
                 elif action == "export-edit":
                     mode = data.get("mode")
                     if mode not in ("trace", "full"):
@@ -645,6 +701,37 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": "未找到文件"}, 404)
         except (KeyError, ValueError, OSError, zipfile.BadZipFile) as error:
             self.send({"error": str(error)}, 400)
+
+    def cloud_transfer(self, parts, data):
+        """Backup, restore and connection tests: local files under LOCK, network transfer outside it."""
+        with LOCK:
+            store = cloud_store()
+        if parts == ['api','cloud','test']:
+            return self.send(store.test() if store.provider=='nutstore' else {'ok':True,'message':'同步目录可以访问。云端上传由云盘客户端负责。'})
+        if parts == ['api','cloud','restore']:
+            if store.provider=='nutstore':
+                with store.materialize(data.get('archive')) as source:
+                    with LOCK:
+                        directory,meta=restore_archive(source,DATA,safe_child,revision)
+            else:
+                with LOCK:
+                    directory,meta=restore_archive(store.path(data.get('archive')),DATA,safe_child,revision)
+            return self.send(public_meta(directory, meta), 201)
+        archive_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + secrets.token_hex(6) + '.jemu.zip'
+        with tempfile.TemporaryDirectory(prefix='jemu-archive-') as temp:
+            target = Path(temp) / archive_id
+            with LOCK:
+                directory = deck_dir(parts[2])
+                meta = current_meta(directory)
+                if data.get("baseRevision") != meta["revision"]:
+                    return self.send({"error": "文件已在外部更新。请先载入外部版本，避免覆盖。", "meta": public_meta(directory, meta)}, 409)
+                manifest = create_archive(directory, target, meta)
+                # External AI can write without our lock; do not publish an inconsistent archive.
+                if revision(directory) != meta['revision']:
+                    raise ValueError('备份期间原稿有外部修改，请载入后重试')
+            stored = store.put(target, archive_id, manifest)
+            if isinstance(stored,dict):return self.send(stored)
+            return self.send({'id': archive_id, 'versionCount': manifest['versionCount'], 'bytes': stored.stat().st_size, 'status': 'written-to-sync-folder', 'remoteStatus': 'unknown'})
 
     def write_document_file(self,deck_id,length):
         if length>MAX_BYTES:raise ValueError('文件超过 100 MiB')
