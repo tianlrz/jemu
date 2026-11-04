@@ -56,9 +56,10 @@ jobs:
       - name: Launch the app
         if: matrix.arch == 'arm64'
         run: |
-          export HOME="$RUNNER_TEMP/gui-home"; mkdir -p "$HOME"
+          # The app takes its home from the user account, not $HOME; JEMU_HOME keeps the test library separate.
+          export JEMU_HOME="$RUNNER_TEMP/gui-home"
           dist/Jemu-arm64.app/Contents/MacOS/Jemu & pid=$!
-          session="$HOME/Library/Application Support/Jemu/.runtime/session.json"
+          session="$JEMU_HOME/.runtime/session.json"
           for i in $(seq 1 60); do [ -f "$session" ] && break; sleep 0.5; done
           url=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['url'])" "$session")
           curl -fsS "$url/api/health"; echo
