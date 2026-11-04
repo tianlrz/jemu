@@ -115,15 +115,15 @@ class Bundle(unittest.TestCase):
             run=subprocess.run(['sh',str(ROOT/'packaging/macos/build_dmg.sh'),'arm64',out],capture_output=True,text=True,timeout=60)
             self.assertEqual(run.returncode,0,run.stdout+run.stderr)
             app=Path(out)/'Jemu.app/Contents';code=app/'Resources/app'
-            plist=(app/'Info.plist').read_text();self.assertNotIn('@VERSION@',plist);self.assertIn('<string>Jemu</string>',plist);self.assertNotIn('LSUIElement',plist)
+            plist=(app/'Info.plist').read_text(encoding='utf8');self.assertNotIn('@VERSION@',plist);self.assertIn('<string>Jemu</string>',plist);self.assertNotIn('LSUIElement',plist)
             for name in ('server.py','launch.pyw','app_home.py','render_exports.py','web/index.html','starter'):self.assertTrue((code/name).exists(),name)
             for name in ('tests','library','.runtime','Start.cmd','packaging'):self.assertFalse((code/name).exists(),name)
             self.assertTrue(app_home.in_app_bundle(code.resolve()))
     def test_pinned_runtime_and_shell(self):
-        script=(ROOT/'packaging/macos/build_dmg.sh').read_text()
+        script=(ROOT/'packaging/macos/build_dmg.sh').read_text(encoding='utf8')
         self.assertEqual(len([line for line in script.splitlines() if 'PBS_SHA=' in line]),2)
         self.assertIn('shasum -a 256 -c',script);self.assertIn('--only-binary=:all:',script)
-        shell=(ROOT/'packaging/macos/JemuApp.swift').read_text()
+        shell=(ROOT/'packaging/macos/JemuApp.swift').read_text(encoding='utf8')
         for needle in ('--render-pdf','"-E", "-s", "-B"','JEMU_RENDERER','runOpenPanelWith','WKDownloadDelegate','beforeunload'):self.assertIn(needle,shell)
 
 class WebKitExport(unittest.TestCase):
@@ -141,6 +141,6 @@ class WebKitExport(unittest.TestCase):
             self.assertEqual(popen.call_args.args[0],[str(exe),'--render-pdf',manifest['pdf'],'1920','1080','3',manifest['entry'],manifest['root']])
     def test_desktop_button_stays_in_app(self):
         with patch.dict(os.environ,{'JEMU_NATIVE_SHELL':'1'}):
-            self.assertIn("os.environ.get('JEMU_NATIVE_SHELL')",(ROOT/'server.py').read_text())
+            self.assertIn("os.environ.get('JEMU_NATIVE_SHELL')",(ROOT/'server.py').read_text(encoding='utf8'))
 
 if __name__=='__main__':unittest.main()
