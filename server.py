@@ -11,6 +11,7 @@ import re
 from pathlib import Path, PurePosixPath
 import secrets
 import shutil
+import socketserver
 import subprocess
 import sys
 import tempfile
@@ -696,6 +697,13 @@ class Handler(BaseHTTPRequestHandler):
         return self.send({'ok': True})
 
 
+class LocalServer(ThreadingHTTPServer):
+    """Loopback only: skip HTTPServer's reverse-DNS lookup (getfqdn), which can stall startup for seconds on macOS."""
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def desktop_browser():
     if os.name == "nt":
         return next((Path(p) for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).is_file()), None)
@@ -742,7 +750,7 @@ def main():
             atomic_write(secret, TOKEN.encode("utf-8"))
     if not args.no_seed:
         seed_template()
-    SERVER = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    SERVER = LocalServer(("127.0.0.1", args.port), Handler)
     SERVER.daemon_threads = True
     url = f"http://127.0.0.1:{SERVER.server_port}"
     runtime = ROOT / ".runtime"

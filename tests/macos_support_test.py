@@ -56,9 +56,11 @@ class Browsers(unittest.TestCase):
     def test_mac_app_bundles_are_found_for_export_and_desktop(self):
         with tempfile.TemporaryDirectory() as home:
             chrome=Path(home)/'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-            candidates=render_exports.mac_browsers(home)
-            self.assertIn(Path('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'),candidates);self.assertIn(chrome,candidates)
-            self.assertFalse(any('Safari' in str(path) for path in candidates))
+            everything=render_exports.mac_browsers(home)
+            self.assertIn(Path('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'),everything);self.assertIn(chrome,everything)
+            self.assertFalse(any('Safari' in str(path) for path in everything))
+            # Only the temporary home: a real Mac or CI runner may have Chrome in /Applications.
+            candidates=[path for path in everything if str(path).startswith(home)]
             write(chrome,b'')
             with patch.object(render_exports.sys,'platform','darwin'),patch.object(render_exports,'mac_browsers',lambda:candidates),patch.object(render_exports.shutil,'which',lambda name:None):
                 self.assertEqual(render_exports.browser_path(),str(chrome))
