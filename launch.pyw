@@ -4,10 +4,11 @@ from pathlib import Path
 import sys
 import urllib.request
 
+import app_home
 import server
 
-runtime = server.ROOT / ".runtime"
-runtime.mkdir(exist_ok=True)
+runtime = app_home.RUNTIME
+runtime.mkdir(parents=True, exist_ok=True)
 sys.stdout = (runtime / "server.log").open("a", encoding="utf-8")
 sys.stderr = (runtime / "error.log").open("a", encoding="utf-8")
 
@@ -19,7 +20,7 @@ def launch():
             raise ValueError("Invalid local address")
         with urllib.request.urlopen(url + "/api/health", timeout=2) as response:
             health = json.load(response)
-        if health.get("app") == "deckroom" and Path(health["library"]) == server.ROOT / "library":
+        if health.get("app") == "deckroom" and Path(health["library"]) == app_home.LIBRARY.resolve():
             server.open_window(url)
             return
     except (OSError, ValueError, KeyError):
