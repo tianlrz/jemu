@@ -278,81 +278,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"error": "只允许本机访问"}, 403)
             path = unquote(urlparse(self.path).path)
             parts = path.strip("/").split("/")
+            self.deferred = None
             with LOCK:
-                if path == "/api/health":
-                    return self.send({"ok": True, "app": "deckroom", "name": "Jemu", "displayName": "简幕", "version":VERSION,"library": str(DATA)})
-                if path == '/api/capabilities':return self.send(automation.capabilities())
-                if path == '/api/render-capabilities':return self.send(render_exports.capabilities())
-                if path == '/api/window/status':return self.send(native_window.status(parse_qs(urlparse(self.path).query).get('window',[''])[0]))
-                if path == '/api/settings':return self.send({'backup':public_cloud_config()})
-                if path == '/api/settings/revision':return self.send({'revision':cloud_config_revision()})
-                if path == '/api/ui/state':return self.send({'clients':automation.clients()})
-                if path.startswith('/api/ui/commands/'):
-                    return self.send(automation.result(parts[-1]))
-                if path == "/api/decks":
-                    items = [public_meta(p.parent, current_meta(p.parent)) for p in DATA.glob("*/meta.json")]
-                    return self.send(sorted(items, key=lambda m: m.get("updated", ""), reverse=True))
-                if path in ('/api/cloud/config','/api/settings/backup'):
-                    return self.send(public_cloud_config())
-                if path == '/api/cloud/archives':
-                    query = parse_qs(urlparse(self.path).query)
-                    offset = max(0, min(10000, int(query.get('offset', ['0'])[0])))
-                    store=cloud_store()
-                    if store.provider=='nutstore':
-                        return self.send(store.list(offset=offset,month=query.get('month',[None])[0]))
-                    return self.send(store.list(offset=offset))
-                if len(parts) >= 3 and parts[:2] == ["api", "decks"]:
-                    directory = deck_dir(parts[2])
-                    if len(parts) in (5,6) and parts[3]=='render-jobs':
-                        if len(parts)==5:return self.send(render_exports.status(parts[2],parts[4]))
-                        if parts[5]=='download':
-                            target,kind=render_exports.download(parts[2],parts[4])
-                            mime='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-                            return self.send_file(target,mime,'attachment; filename="jemu-deck.'+kind+'"')
-                    if len(parts)==4 and parts[3]=='files':
-                        return self.send({'revision':revision(directory),'files':[{'path':p.relative_to(directory/'document').as_posix(),'bytes':p.stat().st_size} for p in tree_files(directory/'document')]})
-                    if len(parts)==4 and parts[3]=='rendered-pages':
-                        meta=current_meta(directory);entry=parse_qs(urlparse(self.path).query).get('entry',[meta['entry']])[0]
-                        target=safe_child(directory/'document',entry)
-                        if target.suffix.lower() not in ('.html','.htm'):raise ValueError('只能恢复 HTML 页面')
-                        return self.send(recover_rendered_pages(directory,meta,target.relative_to(directory/'document').as_posix()))
-                    if len(parts)==4 and parts[3]=='file':
-                        name=parse_qs(urlparse(self.path).query).get('path',[''])[0]
-                        return self.send_file(safe_child(directory/'document',name),'application/octet-stream')
-                    if len(parts) == 4 and parts[3] in ('download-full', 'download-trace'):
-                        full = parts[3] == 'download-full'
-                        name = 'jemu-full.zip' if full else 'jemu-edits.md'
-                        return self.send_file(directory / 'exports' / name, 'application/zip' if full else 'text/markdown; charset=utf-8', 'attachment; filename="' + name + '"')
-                    if len(parts) == 4 and parts[3] == 'status':
-                        return self.send({'id': parts[2], 'revision': revision(directory)})
-                    meta = current_meta(directory)
-                    if len(parts) == 4 and parts[3] == "export":
-                        with tempfile.TemporaryDirectory(prefix='jemu-export-') as temp:
-                            target = Path(temp) / 'jemu-deck.zip'
-                            archive_document(directory, target)
-                            return self.send_file(target, 'application/zip', 'attachment; filename="jemu-deck.zip"')
-                    if len(parts)==3:return self.send(public_meta(directory, meta))
-                    return self.send({'error':'未找到接口'},404)
-                if len(parts) >= 3 and parts[0] == "documents":
-                    directory = deck_dir(parts[1])
-                    target = safe_child(directory / "document", "/".join(parts[2:]))
-                    if target.is_dir():
-                        target = next((target / name for name in ('index.html', 'index.htm') if (target / name).is_file()), target / 'index.html')
-                        if not path.endswith('/'):
-                            self.send_response(301);self.send_header('Location', quote(path, safe='/') + '/');self.send_header('Content-Length','0');self.end_headers();return
-                    mime = content_mime(target)
-                    # Preserve BOM/meta/@charset detection for imported legacy documents.
-                    return self.send_file(target, mime)
-                if path in ("/", "/index.html", "/settings", "/settings.html"):
-                    page='settings.html' if path in ('/settings','/settings.html') else 'index.html'
-                    raw = (ROOT / "web" / page).read_text(encoding="utf-8").replace("__SESSION_TOKEN__", TOKEN)
-                    window_key=parse_qs(urlparse(self.path).query).get('window',[''])[0]
-                    if page=='index.html' and window_key in native_window.WINDOWS:raw=raw.replace('<title>Jemu · 简幕</title>','<title>'+native_window.title(window_key)+'</title>')
-                    return self.send(raw.encode("utf-8"), content_type="text/html; charset=utf-8")
-                if path in ("/app.js", "/app.css", "/resources.js", "/compat.js", "/dynamic-deck.js", "/export-layout.js", "/fullscreen.js", "/cloud.js", "/automation.js", "/settings.js", "/settings.css", "/presenting.js", "/presenter.html", "/presenter.js", "/presenter.css"):
-                    target = ROOT / "web" / path.lstrip("/")
-                    return self.send(target.read_bytes(), content_type=content_mime(target) + "; charset=utf-8")
-                self.send({"error": "未找到文件"}, 404)
+                self.get_locked(path, parts)
+            if self.deferred:
+                # Stream outside the lock: a paused <video> or slow download must not stall every other request.
+                self.send_file(*self.deferred)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             self.close_connection = True
         except FileNotFoundError:
@@ -360,14 +291,94 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as error:
             self.send({"error": str(error)}, 400)
 
+    def send_later(self, path, content_type, disposition=None):
+        # Opened under the lock so the file seen is the current one; bytes are sent after it is released.
+        self.deferred = (path, content_type, disposition, path.open('rb'))
+
+    def get_locked(self, path, parts):
+        if path == "/api/health":
+            return self.send({"ok": True, "app": "deckroom", "name": "Jemu", "displayName": "简幕", "version":VERSION,"library": str(DATA)})
+        if path == '/api/capabilities':return self.send(automation.capabilities())
+        if path == '/api/render-capabilities':return self.send(render_exports.capabilities())
+        if path == '/api/window/status':return self.send(native_window.status(parse_qs(urlparse(self.path).query).get('window',[''])[0]))
+        if path == '/api/settings':return self.send({'backup':public_cloud_config()})
+        if path == '/api/settings/revision':return self.send({'revision':cloud_config_revision()})
+        if path == '/api/ui/state':return self.send({'clients':automation.clients()})
+        if path.startswith('/api/ui/commands/'):
+            return self.send(automation.result(parts[-1]))
+        if path == "/api/decks":
+            items = [public_meta(p.parent, current_meta(p.parent)) for p in DATA.glob("*/meta.json")]
+            return self.send(sorted(items, key=lambda m: m.get("updated", ""), reverse=True))
+        if path in ('/api/cloud/config','/api/settings/backup'):
+            return self.send(public_cloud_config())
+        if path == '/api/cloud/archives':
+            query = parse_qs(urlparse(self.path).query)
+            offset = max(0, min(10000, int(query.get('offset', ['0'])[0])))
+            store=cloud_store()
+            if store.provider=='nutstore':
+                return self.send(store.list(offset=offset,month=query.get('month',[None])[0]))
+            return self.send(store.list(offset=offset))
+        if len(parts) >= 3 and parts[:2] == ["api", "decks"]:
+            directory = deck_dir(parts[2])
+            if len(parts) in (5,6) and parts[3]=='render-jobs':
+                if len(parts)==5:return self.send(render_exports.status(parts[2],parts[4]))
+                if parts[5]=='download':
+                    target,kind=render_exports.download(parts[2],parts[4])
+                    mime='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                    return self.send_later(target,mime,'attachment; filename="jemu-deck.'+kind+'"')
+            if len(parts)==4 and parts[3]=='files':
+                return self.send({'revision':revision(directory),'files':[{'path':p.relative_to(directory/'document').as_posix(),'bytes':p.stat().st_size} for p in tree_files(directory/'document')]})
+            if len(parts)==4 and parts[3]=='rendered-pages':
+                meta=current_meta(directory);entry=parse_qs(urlparse(self.path).query).get('entry',[meta['entry']])[0]
+                target=safe_child(directory/'document',entry)
+                if target.suffix.lower() not in ('.html','.htm'):raise ValueError('只能恢复 HTML 页面')
+                return self.send(recover_rendered_pages(directory,meta,target.relative_to(directory/'document').as_posix()))
+            if len(parts)==4 and parts[3]=='file':
+                name=parse_qs(urlparse(self.path).query).get('path',[''])[0]
+                return self.send_later(safe_child(directory/'document',name),'application/octet-stream')
+            if len(parts) == 4 and parts[3] in ('download-full', 'download-trace'):
+                full = parts[3] == 'download-full'
+                name = 'jemu-full.zip' if full else 'jemu-edits.md'
+                return self.send_later(directory / 'exports' / name, 'application/zip' if full else 'text/markdown; charset=utf-8', 'attachment; filename="' + name + '"')
+            if len(parts) == 4 and parts[3] == 'status':
+                return self.send({'id': parts[2], 'revision': revision(directory)})
+            meta = current_meta(directory)
+            if len(parts) == 4 and parts[3] == "export":
+                with tempfile.TemporaryDirectory(prefix='jemu-export-') as temp:
+                    target = Path(temp) / 'jemu-deck.zip'
+                    archive_document(directory, target)
+                    return self.send_file(target, 'application/zip', 'attachment; filename="jemu-deck.zip"')
+            if len(parts)==3:return self.send(public_meta(directory, meta))
+            return self.send({'error':'未找到接口'},404)
+        if len(parts) >= 3 and parts[0] == "documents":
+            directory = deck_dir(parts[1])
+            target = safe_child(directory / "document", "/".join(parts[2:]))
+            if target.is_dir():
+                target = next((target / name for name in ('index.html', 'index.htm') if (target / name).is_file()), target / 'index.html')
+                if not path.endswith('/'):
+                    self.send_response(301);self.send_header('Location', quote(path, safe='/') + '/');self.send_header('Content-Length','0');self.end_headers();return
+            mime = content_mime(target)
+            # Preserve BOM/meta/@charset detection for imported legacy documents.
+            return self.send_later(target, mime)
+        if path in ("/", "/index.html", "/settings", "/settings.html"):
+            page='settings.html' if path in ('/settings','/settings.html') else 'index.html'
+            raw = (ROOT / "web" / page).read_text(encoding="utf-8").replace("__SESSION_TOKEN__", TOKEN)
+            window_key=parse_qs(urlparse(self.path).query).get('window',[''])[0]
+            if page=='index.html' and window_key in native_window.WINDOWS:raw=raw.replace('<title>Jemu · 简幕</title>','<title>'+native_window.title(window_key)+'</title>')
+            return self.send(raw.encode("utf-8"), content_type="text/html; charset=utf-8")
+        if path in ("/app.js", "/app.css", "/resources.js", "/compat.js", "/dynamic-deck.js", "/export-layout.js", "/fullscreen.js", "/cloud.js", "/automation.js", "/settings.js", "/settings.css", "/presenting.js", "/presenter.html", "/presenter.js", "/presenter.css"):
+            target = ROOT / "web" / path.lstrip("/")
+            return self.send(target.read_bytes(), content_type=content_mime(target) + "; charset=utf-8")
+        self.send({"error": "未找到文件"}, 404)
+
     def do_POST(self):
         # Serialize body decoding too: concurrent large requests must not multiply RAM use.
         with LOCK:
             self.post_locked()
 
-    def send_file(self, path, content_type, disposition=None):
-        with path.open('rb') as stream:
-            size = path.stat().st_size
+    def send_file(self, path, content_type, disposition=None, opened=None):
+        with opened or path.open('rb') as stream:
+            size = os.fstat(stream.fileno()).st_size
             start, end, partial = 0, size - 1, False
             requested = self.headers.get('Range') if not self.headers.get('If-Range') else None
             if requested:
