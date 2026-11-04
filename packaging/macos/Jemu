@@ -8,4 +8,6 @@ if ! jemu_find_python; then
   [ "$answer" = "打开 Python 下载页" ] && open "https://www.python.org/downloads/macos/"
   exit 1
 fi
+# The bundle may be read-only or sealed; keep bytecode caches out of it.
+export PYTHONDONTWRITEBYTECODE=1
 exec "$JEMU_PYTHON" "$APP_CODE/launch.pyw"

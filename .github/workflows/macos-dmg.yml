@@ -23,7 +23,7 @@ jobs:
           test -x dist/Jemu.app/Contents/MacOS/Jemu
           plutil -lint dist/Jemu.app/Contents/Info.plist
           test ! -e "$app/library" && test ! -e "$app/tests"
-          export HOME="$RUNNER_TEMP/home"; mkdir -p "$HOME"
+          export HOME="$RUNNER_TEMP/home" PYTHONDONTWRITEBYTECODE=1; mkdir -p "$HOME"
           python "$app/jemu.py" --json start --port 0
           python "$app/jemu.py" --json status
           test -f "$HOME/Library/Application Support/Jemu/.runtime/session.json"
