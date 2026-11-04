@@ -563,7 +563,7 @@ window.addEventListener('pagehide',()=>{state.disposed=true;clearInterval(state.
 $('editButton').onclick=()=>{if(state.deck)setEdit(!state.edit);};
 $('historyButton').onclick=()=>setPanel(state.panel==='history'?null:'history');
 $('cloudButton').onclick=run(()=>openSettings());
-$('desktopButton').onclick=run(async()=>{commitText();if(state.dirty)await save();await api('/api/open-desktop',{deck:state.deck?.id});toast('已打开桌面窗口；点击「开始演示」进入无边框全屏');});
+$('desktopButton').onclick=run(async()=>{commitText();if(state.dirty)await save();const opened=await api('/api/open-desktop',{deck:state.deck?.id});toast(opened.nativeFullscreen?'已打开桌面窗口；点击「开始演示」进入无边框全屏':'已打开桌面窗口；点击「开始演示」进入系统全屏');});
 $('exportMenuButton').onclick=()=>setPanel(state.panel==='export'?null:'export');
 document.querySelectorAll('.close-panel').forEach(button=>button.onclick=()=>{if(state.panel==='edit')setEdit(false);setPanel(null);});
 $('prevButton').onclick=()=>navigate(-1);$('nextButton').onclick=()=>navigate(1);

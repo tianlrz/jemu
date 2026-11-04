@@ -1,0 +1,8 @@
+#!/bin/sh
+# macOS / Linux CLI entry; same commands as jemu.cmd (see CLI.md).
+. "$(dirname "$0")/jemu_python.sh"
+if ! jemu_find_python; then
+  echo "Python 3.10 or newer is required." 1>&2
+  exit 3
+fi
+exec "$JEMU_PYTHON" "$(dirname "$0")/jemu.py" "$@"

@@ -11,7 +11,9 @@ import re
 from pathlib import Path, PurePosixPath
 import secrets
 import shutil
+import socketserver
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -26,7 +28,7 @@ import native_window
 from rendered_pages import recover as recover_rendered_pages
 from edit_exports import build_artifacts, full_bundle
 from cloud_archives import FolderArchiveStore, create_archive, restore_archive
-from credentials import load_secret, save_secret
+from credentials import delete_secret, load_secret, save_secret
 from webdav_store import NutstoreArchiveStore, NUTSTORE_URL
 
 ROOT = Path(__file__).resolve().parent
@@ -421,7 +423,7 @@ class Handler(BaseHTTPRequestHandler):
                     deck=data.get('deck');suffix=''
                     if deck:deck_dir(deck);suffix='?'+urlencode({'deck':deck})
                     open_window(f'http://127.0.0.1:{SERVER.server_port}/'+suffix)
-                    return self.send({'opened':True})
+                    return self.send({'opened':True,'nativeFullscreen':os.name=='nt'})
                 if parts==['api','ui','sync']:return self.send({**automation.sync(data),'settingsRevision':cloud_config_revision()})
                 if parts==['api','ui','commands']:return self.send(automation.enqueue(data),202)
                 if data.get('expectedSettingsRevision') and data['expectedSettingsRevision']!=cloud_config_revision():
@@ -449,7 +451,7 @@ class Handler(BaseHTTPRequestHandler):
                     atomic_json(DATA / '.settings' / 'cloud.json', config)
                     return self.send(public_cloud_config())
                 if parts == ['api','cloud','disconnect']:
-                    (DATA/'.settings'/'webdav.secret').unlink(missing_ok=True)
+                    delete_secret(DATA/'.settings'/'webdav.secret')
                     atomic_json(DATA/'.settings'/'cloud.json',{'provider':'nutstore','folder':'','username':''})
                     return self.send(public_cloud_config())
                 if parts == ['api','cloud','test']:
@@ -464,8 +466,7 @@ class Handler(BaseHTTPRequestHandler):
                 if parts == ['api', 'cloud', 'open-folder']:
                     store = cloud_store()
                     if store.provider=='nutstore':return self.send({'error':'WebDAV 存档请在云端列表中查看'},400)
-                    if os.name == 'nt':
-                        os.startfile(str(store.root if store.root.is_dir() else store.folder))
+                    reveal_folder(store.root if store.root.is_dir() else store.folder)
                     return self.send({'ok': True})
                 if parts == ["api", "import"]:
                     files = [(f["path"], base64.b64decode(f["data"], validate=True)) for f in data["files"]]
@@ -633,8 +634,7 @@ class Handler(BaseHTTPRequestHandler):
                     atomic_write(directory / "ai-request.md", prompt.encode("utf-8"))
                     return self.send({"prompt": prompt, "path": str(directory / "ai-request.md")})
                 elif action == "open-folder":
-                    if os.name == "nt":
-                        os.startfile(str(directory / "document"))
+                    reveal_folder(directory / "document")
                     return self.send({"ok": True})
                 else:
                     return self.send({"error": "未找到操作"}, 404)
@@ -697,15 +697,39 @@ class Handler(BaseHTTPRequestHandler):
         return self.send({'ok': True})
 
 
+class LocalServer(ThreadingHTTPServer):
+    """Loopback only: skip HTTPServer's reverse-DNS lookup (getfqdn), which can stall startup for seconds on macOS."""
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
+def desktop_browser():
+    if os.name == "nt":
+        return next((Path(p) for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).is_file()), None)
+    if sys.platform == "darwin":
+        return next((p for p in render_exports.mac_browsers() if p.is_file()), None)
+    return None
+
+
 def open_window(url):
     runtime = ROOT / ".runtime"
-    edge = next((Path(p) for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).is_file()), None)
-    if edge:
-        key=native_window.allocate(edge)
-        url+=('&' if '?' in url else '?')+urlencode({'window':key})
-        subprocess.Popen([str(edge), "--app=" + url, "--user-data-dir=" + str(runtime / "browser"), "--no-first-run", "--window-size=1440,940"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    browser = desktop_browser()
+    if browser:
+        if os.name == "nt":
+            # Only Windows registers a window for borderless control; macOS uses the browser's own fullscreen.
+            key=native_window.allocate(browser)
+            url+=('&' if '?' in url else '?')+urlencode({'window':key})
+        subprocess.Popen([str(browser), "--app=" + url, "--user-data-dir=" + str(runtime / "browser"), "--no-first-run", "--no-default-browser-check", "--window-size=1440,940"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=os.name != "nt")
     else:
         webbrowser.open(url)
+
+
+def reveal_folder(path):
+    if os.name == "nt":
+        os.startfile(str(path))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "--", str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
@@ -726,7 +750,7 @@ def main():
             atomic_write(secret, TOKEN.encode("utf-8"))
     if not args.no_seed:
         seed_template()
-    SERVER = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    SERVER = LocalServer(("127.0.0.1", args.port), Handler)
     SERVER.daemon_threads = True
     url = f"http://127.0.0.1:{SERVER.server_port}"
     runtime = ROOT / ".runtime"

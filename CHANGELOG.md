@@ -1,5 +1,13 @@
 # 版本记录
 
+## 未发布
+
+- macOS 预览支持：`Start.command` 双击启动、`./jemu` CLI；自动寻找 `/Applications`、`~/Applications` 中的 Chrome／Edge／Chromium，用于独立应用窗口和 PDF／PPT 导出。
+- macOS 演示使用浏览器系统全屏；Windows 无边框窗口控制不变。
+- macOS 坚果云应用密码保存在登录钥匙串，通过 Security.framework 内存传递，不出现在命令行参数中；断开关联时一并删除。
+- 「打开文件夹」在 macOS 使用 Finder；非 Windows 导出进程按进程组结束，避免遗留浏览器子进程。
+- CI 增加 macOS 运行器；新增 tests/macos_support_test.py。
+
 ## v0.1.0-preview.2 · 2026-10-16
 
 - 固定导入文件与界面脚本的 `.js`／`.mjs` MIME 类型，避免 Windows 文件关联将其标记为普通文本，导致模块被浏览器拒绝加载。

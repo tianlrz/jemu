@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -22,8 +23,16 @@ MAX_PAGES=200
 MAX_HTML=10*1024*1024
 MAX_OUTPUT=100*1024*1024
 
+MAC_BROWSERS=('Google Chrome.app/Contents/MacOS/Google Chrome','Microsoft Edge.app/Contents/MacOS/Microsoft Edge','Chromium.app/Contents/MacOS/Chromium')
+
+def mac_browsers(home=None):
+    """System and per-user app bundles; Safari cannot print headless, so it is not used."""
+    roots=[Path('/Applications'),Path(home or Path.home())/'Applications']
+    return [root/name for name in MAC_BROWSERS for root in roots]
+
 def browser_path():
-    candidates=[Path(os.environ.get(key,''))/suffix for key,suffix in [('PROGRAMFILES(X86)','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Google/Chrome/Application/chrome.exe')]]
+    if sys.platform=='darwin':candidates=mac_browsers()
+    else:candidates=[Path(os.environ.get(key,''))/suffix for key,suffix in [('PROGRAMFILES(X86)','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Google/Chrome/Application/chrome.exe')]] if os.name=='nt' else []
     return next((str(path) for path in candidates if path.is_file()),shutil.which('chromium') or shutil.which('google-chrome') or shutil.which('msedge'))
 
 def capabilities():
@@ -155,7 +164,7 @@ def start(directory,meta,data,files,safe_child,revision_check=None):
             try:
                 with JOB_LOCK:job.update(status='rendering',message='正在排出整稿；PPT 会逐页转换图片')
                 flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
-                process=subprocess.Popen([sys.executable,str(ROOT/'render_exports.py'),'--worker',str(work/'job.json')],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
+                process=subprocess.Popen([sys.executable,str(ROOT/'render_exports.py'),'--worker',str(work/'job.json')],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags,start_new_session=os.name!='nt')
                 with JOB_LOCK:job['process']=process
                 try:process.wait(timeout=110)
                 finally:stop_tree(process)
@@ -201,16 +210,20 @@ def process_job(process):
     return lambda:kernel.CloseHandle(handle)
 
 def stop_tree(process):
+    if os.name!='nt':
+        # Started with start_new_session: the group id is the pid, so helpers left by the browser go too.
+        try:os.killpg(process.pid,signal.SIGKILL)
+        except (ProcessLookupError,PermissionError):pass
+        if process.poll() is None:process.kill()
+        process.wait(timeout=10);return
     if process.poll() is not None:return
-    if os.name=='nt':
-        subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW,timeout=10)
-    else:process.kill()
+    subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW,timeout=10)
     process.wait(timeout=10)
 
 def make_pdf(manifest):
     flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
     args=[manifest['browser'],'--headless=new','--disable-gpu','--disable-extensions','--disable-background-networking','--no-first-run','--no-default-browser-check','--no-pdf-header-footer','--virtual-time-budget=5000','--timeout=15000','--user-data-dir='+manifest['profile'],'--print-to-pdf='+manifest['pdf'],Path(manifest['entry']).as_uri()]
-    process=subprocess.Popen(args,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
+    process=subprocess.Popen(args,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags,start_new_session=os.name!='nt')
     close_job=process_job(process)
     try:process.wait(timeout=55)
     finally:

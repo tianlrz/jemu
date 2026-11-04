@@ -4,7 +4,7 @@
 
 ## 入口与结果
 
-在应用目录使用 `./jemu.cmd`（PowerShell 用 `.\jemu.cmd`）。跨目录可以使用完整路径，或自行把应用目录加入 PATH。其他系统用 `python jemu.py`，凭据加密保存目前仍仅支持 Windows。
+在应用目录使用 `./jemu.cmd`（PowerShell 用 `.\jemu.cmd`）。跨目录可以使用完整路径，或自行把应用目录加入 PATH。macOS／Linux 用 `./jemu`（自动寻找 Python 3.10+），或 `python3 jemu.py`。坚果云凭据在 Windows 用 DPAPI、macOS 用登录钥匙串保存，其他系统暂不支持。
 
 ```powershell
 .\jemu.cmd start

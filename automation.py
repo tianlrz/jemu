@@ -74,7 +74,7 @@ def result(key):
 
 
 def capabilities():
-    return {'apiVersion':1,'transport':'loopback-http','mcp':{'transport':'stdio','entry':'jemu_mcp.py'},'pages':{'workspace':'/','settings':'/settings'},'cli':'jemu.cmd / python jemu.py',
+    return {'apiVersion':1,'transport':'loopback-http','mcp':{'transport':'stdio','entry':'jemu_mcp.py'},'pages':{'workspace':'/','settings':'/settings'},'cli':'jemu.cmd / ./jemu / python jemu.py',
         'settings':{'get':'GET /api/settings','backup':'GET|POST /api/settings/backup','test':'POST /api/cloud/test','disconnect':'POST /api/cloud/disconnect'},
         'operations':['start','stop','status','settings','decks','files','versions','export','backup','ui','request'],
         'fileAPI':{'list':'GET /api/decks/{id}/files','read':'GET /api/decks/{id}/file?path=...','write':'POST /api/decks/{id}/file?path=...&baseRevision=... (binary body)','delete':'POST /api/decks/{id}/delete-file (JSON path,baseRevision)'},
