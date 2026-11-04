@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode
 import webbrowser
 import zipfile
+import app_home
 import automation
 import render_exports
 import native_window
@@ -713,7 +714,7 @@ def desktop_browser():
 
 
 def open_window(url):
-    runtime = ROOT / ".runtime"
+    runtime = app_home.RUNTIME
     browser = desktop_browser()
     if browser:
         if os.name == "nt":
@@ -736,14 +737,14 @@ def main():
     global DATA, SERVER, TOKEN
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=0)
-    parser.add_argument("--data-dir", type=Path, default=ROOT / "library")
+    parser.add_argument("--data-dir", type=Path, default=app_home.LIBRARY)
     parser.add_argument("--desktop", action="store_true")
     parser.add_argument("--no-seed", action="store_true")
     args = parser.parse_args()
     DATA = args.data_dir.resolve()
     DATA.mkdir(parents=True, exist_ok=True)
-    if DATA == (ROOT / "library").resolve():
-        secret = ROOT / ".runtime" / "session-secret"
+    if DATA == app_home.LIBRARY.resolve():
+        secret = app_home.RUNTIME / "session-secret"
         if secret.is_file():
             TOKEN = secret.read_text(encoding="utf-8").strip()
         else:
@@ -753,9 +754,9 @@ def main():
     SERVER = LocalServer(("127.0.0.1", args.port), Handler)
     SERVER.daemon_threads = True
     url = f"http://127.0.0.1:{SERVER.server_port}"
-    runtime = ROOT / ".runtime"
-    runtime.mkdir(exist_ok=True)
-    if DATA == (ROOT / "library").resolve():
+    runtime = app_home.RUNTIME
+    runtime.mkdir(parents=True, exist_ok=True)
+    if DATA == app_home.LIBRARY.resolve():
         atomic_json(runtime / "session.json", {"url": url, "pid": os.getpid(), "library": str(DATA)})
     print(url, flush=True)
     if args.desktop:

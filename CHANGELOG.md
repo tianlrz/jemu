@@ -2,6 +2,12 @@
 
 ## 未发布
 
+- macOS DMG：CI 在 macOS 上构建 `Jemu.app` 与 `Jemu-<版本>.dmg`（Actions 产物；推送 `v*` 标签时附加到 Release）。App 只含代码，使用本机 Python 3.10+ 与 Chrome／Edge，缺 Python 时提示下载。未经 Apple 签名公证。
+- App 内运行时，工作库与运行文件放在 `~/Library/Application Support/Jemu/`；文件夹方式仍在应用目录。`JEMU_HOME` 可覆盖。
+- Python 查找优先 python.org 与 Homebrew 位置，Finder 启动时也能找到。
+
+## 未发布
+
 - macOS 预览支持：`Start.command` 双击启动、`./jemu` CLI；自动寻找 `/Applications`、`~/Applications` 中的 Chrome／Edge／Chromium，用于独立应用窗口和 PDF／PPT 导出。
 - macOS 演示使用浏览器系统全屏；Windows 无边框窗口控制不变。
 - macOS 坚果云应用密码保存在登录钥匙串，通过 Security.framework 内存传递，不出现在命令行参数中；断开关联时一并删除。

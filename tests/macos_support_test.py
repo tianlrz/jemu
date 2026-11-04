@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+import app_home
 import credentials
 import render_exports
 import server
@@ -91,5 +92,33 @@ class Launchers(unittest.TestCase):
     def test_cli_wrapper_runs_jemu(self):
         run=subprocess.run([str(ROOT/'jemu'),'--help'],capture_output=True,text=True,timeout=30)
         self.assertEqual(run.returncode,0,run.stderr);self.assertIn('usage: jemu',run.stdout)
+
+class AppHome(unittest.TestCase):
+    def test_folder_copy_keeps_data_beside_code(self):
+        root=Path('/Users/me/Downloads/jemu')
+        self.assertFalse(app_home.in_app_bundle(root));self.assertEqual(app_home.home(root,{}),root)
+    def test_app_bundle_uses_application_support(self):
+        root=Path('/Applications/Jemu.app/Contents/Resources/app')
+        self.assertTrue(app_home.in_app_bundle(root))
+        self.assertEqual(app_home.home(root,{}),Path.home()/'Library/Application Support/Jemu')
+        # Translocated copies from a DMG are read-only random paths; still detected.
+        self.assertTrue(app_home.in_app_bundle(Path('/private/var/folders/x/AppTranslocation/ABC/d/Jemu.app/Contents/Resources/app')))
+    def test_override_wins(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(app_home.home(Path('/Applications/Jemu.app/Contents/Resources/app'),{'JEMU_HOME':temp}),Path(temp).resolve())
+
+class Bundle(unittest.TestCase):
+    @unittest.skipIf(os.name=='nt' or sys.platform=='darwin','POSIX build without DMG; macOS builds the DMG in its own workflow')
+    def test_app_bundle_layout(self):
+        if subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True).returncode:self.skipTest('needs a git checkout')
+        with tempfile.TemporaryDirectory() as out:
+            run=subprocess.run(['sh',str(ROOT/'packaging/macos/build_dmg.sh'),out],capture_output=True,text=True,timeout=60)
+            self.assertEqual(run.returncode,0,run.stdout+run.stderr)
+            app=Path(out)/'Jemu.app/Contents';code=app/'Resources/app'
+            self.assertTrue(os.access(app/'MacOS/Jemu',os.X_OK))
+            plist=(app/'Info.plist').read_text();self.assertNotIn('@VERSION@',plist);self.assertIn('<string>Jemu</string>',plist)
+            for name in ('server.py','launch.pyw','app_home.py','jemu_python.sh','web/index.html','starter'):self.assertTrue((code/name).exists(),name)
+            for name in ('tests','library','.runtime','Start.cmd','packaging'):self.assertFalse((code/name).exists(),name)
+            self.assertTrue(app_home.in_app_bundle(code.resolve()))
 
 if __name__=='__main__':unittest.main()

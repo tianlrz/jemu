@@ -1,0 +1,44 @@
+name: macOS DMG
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Jemu.app and DMG
+        run: packaging/macos/build_dmg.sh dist
+      - name: Smoke test the bundled app
+        run: |
+          app=dist/Jemu.app/Contents/Resources/app
+          test -x dist/Jemu.app/Contents/MacOS/Jemu
+          plutil -lint dist/Jemu.app/Contents/Info.plist
+          test ! -e "$app/library" && test ! -e "$app/tests"
+          export HOME="$RUNNER_TEMP/home"; mkdir -p "$HOME"
+          python "$app/jemu.py" --json start --port 0
+          python "$app/jemu.py" --json status
+          test -f "$HOME/Library/Application Support/Jemu/.runtime/session.json"
+          test -d "$HOME/Library/Application Support/Jemu/library"
+          python "$app/jemu.py" --json stop --force
+          hdiutil verify dist/Jemu-*.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jemu-macOS-dmg
+          path: dist/Jemu-*.dmg
+          if-no-files-found: error
+      - name: Attach DMG to the release for this tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --prerelease --title "$GITHUB_REF_NAME" --notes "macOS DMG built by CI. See CHANGELOG.md."
+          gh release upload "$GITHUB_REF_NAME" dist/Jemu-*.dmg --clobber

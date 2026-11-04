@@ -22,7 +22,9 @@ Deck 是一种组织内容的方式。简幕希望承载的完整作品，可以
 
 Windows 双击 **Start.cmd**。需要 Python 3.10+，优先使用这台电脑已有的运行环境；Edge 会打开独立应用窗口。也可以运行 `python server.py --desktop`。本版是本地服务加独立窗口，尚未打包成安装程序。
 
-macOS（预览）：双击 **Start.command**。需要 Python 3.10+（python.org 或 Homebrew；系统自带的 3.9 不够），会依次寻找 `/Applications` 或 `~/Applications` 中的 Google Chrome、Microsoft Edge、Chromium，用独立应用窗口打开；都没有时退回默认浏览器。首次运行若提示无法验证开发者，在 Finder 中右键 `Start.command` 选「打开」，或运行 `xattr -d com.apple.quarantine Start.command`。也可以在终端运行 `python3 server.py --desktop`；CLI 用 `./jemu`。与 Windows 的差别：
+macOS 安装包（预览）：在 [Releases](https://github.com/tianlrz/jemu/releases) 或 Actions 的「macOS DMG」运行中下载 `Jemu-<版本>.dmg`，把「Jemu」拖进「应用程序」后打开。安装包只含简幕代码（不到 1 MB），**不内置 Python 或浏览器**，仍需本机有 Python 3.10+ 与 Chrome／Edge；缺 Python 时会弹窗指向下载页。稿件与设置保存在 `~/Library/Application Support/Jemu/`，替换或删除 App 不会丢失；可用环境变量 `JEMU_HOME` 改位置。安装包未经 Apple 开发者签名和公证：首次打开若被拦截，到「系统设置 → 隐私与安全性」点「仍要打开」，或运行 `xattr -dr com.apple.quarantine /Applications/Jemu.app`。打包脚本见 `packaging/macos/build_dmg.sh`。
+
+macOS（文件夹方式）：双击 **Start.command**。需要 Python 3.10+（python.org 或 Homebrew；系统自带的 3.9 不够），会依次寻找 `/Applications` 或 `~/Applications` 中的 Google Chrome、Microsoft Edge、Chromium，用独立应用窗口打开；都没有时退回默认浏览器。首次运行若提示无法验证开发者，在 Finder 中右键 `Start.command` 选「打开」，或运行 `xattr -d com.apple.quarantine Start.command`。也可以在终端运行 `python3 server.py --desktop`；CLI 用 `./jemu`。与 Windows 的差别：
 - 「开始演示」使用浏览器自身的系统全屏（Chrome／Edge 应用窗口里会进入 macOS 全屏空间），没有 Windows 那套无边框窗口控制；Esc 同样退出。
 - PDF／PPT 导出使用上述 Chrome／Edge 无界面打印，导出进程组在完成或超时后整体结束。
 - 坚果云应用密码保存在当前用户的「登录」钥匙串（服务名 `Jemu WebDAV`），工作库里只留一个随机条目名；首次读取时系统可能请求允许访问。

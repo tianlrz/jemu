@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import app_home
 import time
 from urllib.parse import urlencode, urlparse
 
@@ -28,7 +29,7 @@ class Parser(argparse.ArgumentParser):
 class Client:
     def __init__(self,url=None):
         if not url:
-            try:url=json.loads((ROOT/'.runtime/session.json').read_text(encoding='utf8'))['url']
+            try:url=json.loads((app_home.RUNTIME/'session.json').read_text(encoding='utf8'))['url']
             except (OSError,ValueError,KeyError):raise CLIError('服务尚未启动，请先 jemu start','not_running',3)
         parsed=urlparse(url)
         if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost') or not parsed.port or parsed.username or parsed.password or parsed.path not in ('','/') or parsed.query or parsed.fragment:
@@ -170,7 +171,7 @@ def start_service(args):
         existing=Client();return {'running':True,'url':existing.url,'reused':True}
     except CLIError as error:
         if error.code not in ('not_running','connection_error'):raise
-    runtime=ROOT/'.runtime';runtime.mkdir(exist_ok=True)
+    runtime=app_home.RUNTIME;runtime.mkdir(parents=True,exist_ok=True)
     command=[sys.executable,str(ROOT/'server.py'),'--port',str(args.port)]
     if args.desktop:command.append('--desktop')
     with (runtime/'server.log').open('ab') as stdout,(runtime/'error.log').open('ab') as stderr:
