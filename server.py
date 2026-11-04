@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode
@@ -290,6 +291,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": "未找到文件"}, 404)
         except (ValueError, OSError) as error:
             self.send({"error": str(error)}, 400)
+        except Exception:
+            self.internal_error()
+
+    def internal_error(self):
+        # Unexpected input or a bug: log it, answer with a stable error instead of dropping the connection.
+        traceback.print_exc()
+        try:self.send({"error": "服务处理请求时出错，请重试；详细信息见 .runtime/error.log", "code": "internal_error"}, 500)
+        except OSError:self.close_connection = True
 
     def send_later(self, path, content_type, disposition=None):
         # Opened under the lock so the file seen is the current one; bytes are sent after it is released.
@@ -656,8 +665,12 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
         except FileNotFoundError:
             self.send({"error": "未找到文件"}, 404)
-        except (KeyError, ValueError, OSError, zipfile.BadZipFile) as error:
+        except KeyError as error:
+            self.send({"error": "请求缺少字段：" + str(error).strip("'")}, 400)
+        except (ValueError, OSError, zipfile.BadZipFile) as error:
             self.send({"error": str(error)}, 400)
+        except Exception:
+            self.internal_error()
 
     def write_document_file(self,deck_id,length):
         if length>MAX_BYTES:raise ValueError('文件超过 100 MiB')

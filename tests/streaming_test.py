@@ -1,6 +1,7 @@
-"""A stalled media stream (paused <video>, slow download) must not block other requests."""
+"""Service robustness: a stalled media stream must not block other requests; bad input gets a JSON error."""
 from pathlib import Path
 import json
+import re
 import os
 import socket
 import subprocess
@@ -8,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +52,14 @@ class StalledStream(unittest.TestCase):
         request = urllib.request.Request(f'{self.url}/documents/{self.deck}/video.mp4', headers={'Range': 'bytes=10-19'})
         with urllib.request.urlopen(request, timeout=5) as response:
             self.assertEqual(response.status, 206); self.assertEqual(response.read(), self.video[10:20])
+
+    def test_malformed_request_gets_an_error_not_a_dropped_connection(self):
+        token = re.search(r"DECKROOM_TOKEN='([^']+)'", urllib.request.urlopen(self.url + '/').read().decode()).group(1)
+        for body, status in [({'files': 'x', 'entry': 1}, 500), ({}, 400)]:
+            request = urllib.request.Request(self.url + '/api/import', data=json.dumps(body).encode(), headers={'X-Deckroom-Token': token, 'Content-Type': 'application/json'})
+            with self.assertRaises(urllib.error.HTTPError) as caught:urllib.request.urlopen(request, timeout=5)
+            self.assertEqual(caught.exception.code, status); self.assertIn('error', json.loads(caught.exception.read()))
+        with urllib.request.urlopen(self.url + '/api/health', timeout=5) as response:self.assertTrue(json.load(response)['ok'])
 
 
 if __name__ == '__main__':
