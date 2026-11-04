@@ -27,7 +27,14 @@ class StalledStream(unittest.TestCase):
         self.deck = self.cli('decks', 'import', str(source), '--entry', 'index.html', '--name', 'stream')['id']
 
     def tearDown(self):
-        self.cli('stop', '--force'); self.temp.cleanup()
+        self.cli('stop', '--force')
+        # On Windows the stopping service may still hold .runtime/error.log for a moment.
+        for _ in range(50):
+            try:
+                self.temp.cleanup(); return
+            except PermissionError:
+                time.sleep(0.1)
+        self.temp.cleanup()
 
     def cli(self, *args):
         run = subprocess.run([sys.executable, str(ROOT / 'jemu.py'), '--json', *args], capture_output=True, text=True, encoding='utf8', env=self.env, timeout=60)
