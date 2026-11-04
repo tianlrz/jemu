@@ -421,6 +421,7 @@ class Handler(BaseHTTPRequestHandler):
                 if parts==['api','window','attach']:return self.send(native_window.attach(data.get('window')))
                 if parts==['api','window','fullscreen']:return self.send(native_window.fullscreen(data.get('window'),data.get('enabled')))
                 if parts==['api','open-desktop']:
+                    if os.environ.get('JEMU_NATIVE_SHELL'):return self.send({'opened':False,'inApp':True})
                     deck=data.get('deck');suffix=''
                     if deck:deck_dir(deck);suffix='?'+urlencode({'deck':deck})
                     open_window(f'http://127.0.0.1:{SERVER.server_port}/'+suffix)

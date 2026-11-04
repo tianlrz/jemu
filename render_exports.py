@@ -35,8 +35,13 @@ def browser_path():
     else:candidates=[Path(os.environ.get(key,''))/suffix for key,suffix in [('PROGRAMFILES(X86)','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Microsoft/Edge/Application/msedge.exe'),('PROGRAMFILES','Google/Chrome/Application/chrome.exe')]] if os.name=='nt' else []
     return next((str(path) for path in candidates if path.is_file()),shutil.which('chromium') or shutil.which('google-chrome') or shutil.which('msedge'))
 
+def webkit_renderer():
+    """Jemu.app passes its own executable, which renders PDFs with the system WebKit (no Chrome/Edge)."""
+    path=os.environ.get('JEMU_RENDERER','')
+    return path if sys.platform=='darwin' and path and Path(path).is_file() and os.access(path,os.X_OK) else None
+
 def capabilities():
-    browser=bool(browser_path());pdfium=importlib.util.find_spec('pypdfium2') is not None and importlib.util.find_spec('PIL') is not None
+    browser=bool(webkit_renderer() or browser_path());pdfium=importlib.util.find_spec('pypdfium2') is not None and importlib.util.find_spec('PIL') is not None
     return {'pdf':browser,'pptx':browser and pdfium,'imagePptx':True,'maxPages':MAX_PAGES,'maxConcurrentJobs':1,'rasterLongEdge':2560,'optionalDependency':'pypdfium2 + Pillow','residentRenderer':False}
 
 def public(job):
@@ -156,7 +161,7 @@ def start(directory,meta,data,files,safe_child,revision_check=None):
                 with path.open('rb') as src,dest.open('wb') as dst:shutil.copyfileobj(src,dst,65536)
             page=content/entry;page.write_text(html,encoding='utf8')
             if revision_check and revision_check()!=meta['revision']:raise ValueError('准备导出时原稿有外部修改，请重新载入')
-            manifest={'entry':str(page),'browser':browser_path(),'profile':str(work/'browser'),'pdf':str(work/'deck.pdf'),'target':str(work/('result.'+kind)),'kind':kind,'pages':pages,'result':str(work/'result.json')}
+            manifest={'entry':str(page),'root':str(content),'width':width,'height':height,'webkit':webkit_renderer(),'browser':None if webkit_renderer() else browser_path(),'profile':str(work/'browser'),'pdf':str(work/'deck.pdf'),'target':str(work/('result.'+kind)),'kind':kind,'pages':pages,'result':str(work/'result.json')}
             (work/'job.json').write_text(json.dumps(manifest),encoding='utf8')
         except Exception:temp.cleanup();raise
         JOBS[key]=job;prune()
@@ -222,7 +227,9 @@ def stop_tree(process):
 
 def make_pdf(manifest):
     flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
-    args=[manifest['browser'],'--headless=new','--disable-gpu','--disable-extensions','--disable-background-networking','--no-first-run','--no-default-browser-check','--no-pdf-header-footer','--virtual-time-budget=5000','--timeout=15000','--user-data-dir='+manifest['profile'],'--print-to-pdf='+manifest['pdf'],Path(manifest['entry']).as_uri()]
+    if manifest.get('webkit'):
+        args=[manifest['webkit'],'--render-pdf',manifest['pdf'],str(manifest['width']),str(manifest['height']),str(manifest['pages']),manifest['entry'],manifest['root']]
+    else:args=[manifest['browser'],'--headless=new','--disable-gpu','--disable-extensions','--disable-background-networking','--no-first-run','--no-default-browser-check','--no-pdf-header-footer','--virtual-time-budget=5000','--timeout=15000','--user-data-dir='+manifest['profile'],'--print-to-pdf='+manifest['pdf'],Path(manifest['entry']).as_uri()]
     process=subprocess.Popen(args,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags,start_new_session=os.name!='nt')
     close_job=process_job(process)
     try:process.wait(timeout=55)
@@ -230,7 +237,7 @@ def make_pdf(manifest):
         stop_tree(process)
         if close_job:close_job()
     pdf=Path(manifest['pdf'])
-    if not pdf.is_file() or not pdf.stat().st_size:raise ValueError('系统浏览器没有生成 PDF，请检查素材后重试')
+    if not pdf.is_file() or not pdf.stat().st_size:raise ValueError('系统渲染组件没有生成 PDF，请检查素材后重试')
     if pdf.stat().st_size>MAX_OUTPUT:raise ValueError('PDF 超过 100 MiB')
 
 P='http://schemas.openxmlformats.org/presentationml/2006/main'

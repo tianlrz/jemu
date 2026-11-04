@@ -10,30 +10,58 @@ permissions:
 jobs:
   dmg:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Build Jemu.app and DMG
-        run: packaging/macos/build_dmg.sh dist
-      - name: Smoke test the bundled app
+        run: packaging/macos/build_dmg.sh ${{ matrix.arch }} dist
+      - name: Check the bundle
         run: |
-          app=dist/Jemu.app/Contents/Resources/app
-          test -x dist/Jemu.app/Contents/MacOS/Jemu
-          plutil -lint dist/Jemu.app/Contents/Info.plist
-          test ! -e "$app/library" && test ! -e "$app/tests"
+          app=dist/Jemu-${{ matrix.arch }}.app
+          plutil -lint "$app/Contents/Info.plist"
+          lipo -archs "$app/Contents/MacOS/Jemu" | grep -qx ${{ matrix.arch }}
+          lipo -archs "$app/Contents/Resources/python/bin/python3" | grep -qx ${{ matrix.arch }}
+          test ! -e "$app/Contents/Resources/app/library" && test ! -e "$app/Contents/Resources/app/tests"
+          codesign --verify --deep --strict "$app"
+          hdiutil verify dist/Jemu-*-${{ matrix.arch }}.dmg
+      # The runner is Apple silicon, so the arm64 build is also run for real.
+      - name: Bundled Python, CLI and service
+        if: matrix.arch == 'arm64'
+        run: |
+          app=dist/Jemu-arm64.app/Contents
+          py="$app/Resources/python/bin/python3"
+          "$py" -c "import ssl, sqlite3, zlib, ctypes, pypdfium2, PIL; print('bundled python ok')"
           export HOME="$RUNNER_TEMP/home" PYTHONDONTWRITEBYTECODE=1; mkdir -p "$HOME"
-          python "$app/jemu.py" --json start --port 0
-          python "$app/jemu.py" --json status
-          test -f "$HOME/Library/Application Support/Jemu/.runtime/session.json"
+          "$py" "$app/Resources/app/jemu.py" --json start --port 0
+          JEMU_RENDERER="$PWD/$app/MacOS/Jemu" "$py" -c "import sys; sys.path.insert(0, sys.argv[1]); import render_exports as r; c = r.capabilities(); print(c); assert r.webkit_renderer() and c['pdf'] and c['pptx']" "$app/Resources/app"
           test -d "$HOME/Library/Application Support/Jemu/library"
-          python "$app/jemu.py" --json stop --force
-          hdiutil verify dist/Jemu-*.dmg
+          "$py" "$app/Resources/app/jemu.py" --json stop --force
+      - name: PDF/PPT export through system WebKit (no Chrome)
+        if: matrix.arch == 'arm64'
+        run: |
+          app=dist/Jemu-arm64.app/Contents
+          JEMU_RENDERER="$PWD/$app/MacOS/Jemu" "$app/Resources/python/bin/python3" tests/render_exports_test.py
+      - name: Launch the app
+        if: matrix.arch == 'arm64'
+        run: |
+          export HOME="$RUNNER_TEMP/gui-home"; mkdir -p "$HOME"
+          dist/Jemu-arm64.app/Contents/MacOS/Jemu & pid=$!
+          session="$HOME/Library/Application Support/Jemu/.runtime/session.json"
+          for i in $(seq 1 60); do [ -f "$session" ] && break; sleep 0.5; done
+          url=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['url'])" "$session")
+          curl -fsS "$url/api/health"; echo
+          kill -0 $pid
+          kill -TERM $pid; sleep 1
+          pkill -INT -f "Jemu-arm64.app/Contents/Resources/app/server.py" || true
       - uses: actions/upload-artifact@v4
         with:
-          name: Jemu-macOS-dmg
-          path: dist/Jemu-*.dmg
+          name: Jemu-macOS-${{ matrix.arch }}
+          path: dist/Jemu-*-${{ matrix.arch }}.dmg
           if-no-files-found: error
       - name: Attach DMG to the release for this tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -41,4 +69,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --prerelease --title "$GITHUB_REF_NAME" --notes "macOS DMG built by CI. See CHANGELOG.md."
-          gh release upload "$GITHUB_REF_NAME" dist/Jemu-*.dmg --clobber
+          gh release upload "$GITHUB_REF_NAME" dist/Jemu-*-${{ matrix.arch }}.dmg --clobber
