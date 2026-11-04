@@ -1,13 +1,10 @@
 # 版本记录
 
-## 未发布
+## v0.1.0-preview.3 · 2026-11-04
 
 - macOS DMG：CI 构建 Apple 芯片与 Intel 两个 `Jemu-<版本>-<架构>.dmg`（Actions 产物；推送 `v*` 标签时附加到 Release）。App 自带精简 Python 3.12 与 PPT 组件，界面和 PDF 导出使用系统 WebKit 原生外壳，无需另装 Python、Chrome 或 Edge。未经 Apple 签名公证。
 - App 内运行时，工作库与运行文件放在 `~/Library/Application Support/Jemu/`；文件夹方式仍在应用目录。`JEMU_HOME` 可覆盖。
 - Python 查找优先 python.org 与 Homebrew 位置，Finder 启动时也能找到。
-
-## 未发布
-
 - macOS 预览支持：`Start.command` 双击启动、`./jemu` CLI；自动寻找 `/Applications`、`~/Applications` 中的 Chrome／Edge／Chromium，用于独立应用窗口和 PDF／PPT 导出。
 - macOS 演示使用浏览器系统全屏；Windows 无边框窗口控制不变。
 - macOS 坚果云应用密码保存在登录钥匙串，通过 Security.framework 内存传递，不出现在命令行参数中；断开关联时一并删除。
