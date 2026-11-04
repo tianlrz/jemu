@@ -41,6 +41,13 @@ jobs:
           JEMU_RENDERER="$PWD/$app/MacOS/Jemu" "$py" -c "import sys; sys.path.insert(0, sys.argv[1]); import render_exports as r; c = r.capabilities(); print(c); assert r.webkit_renderer() and c['pdf'] and c['pptx']" "$app/Resources/app"
           test -d "$HOME/Library/Application Support/Jemu/library"
           "$py" "$app/Resources/app/jemu.py" --json stop --force
+      - name: Render a sample PDF directly with the app
+        if: matrix.arch == 'arm64'
+        run: |
+          d="$RUNNER_TEMP/render"; mkdir -p "$d"
+          printf '%s' '<!doctype html><meta charset="utf-8"><style>html,body{margin:0}section{width:640px;height:360px;overflow:hidden}</style><section style="background:#c00">一</section><section style="background:#00c">二</section>' > "$d/page.html"
+          time dist/Jemu-arm64.app/Contents/MacOS/Jemu --render-pdf "$d/out.pdf" 640 360 2 "$d/page.html" "$d"
+          dist/Jemu-arm64.app/Contents/Resources/python/bin/python3 -c "import pypdfium2 as p, sys; d = p.PdfDocument(sys.argv[1]); print(len(d), [d[i].get_size() for i in range(len(d))]); assert len(d) == 2" "$d/out.pdf"
       - name: PDF/PPT export through system WebKit (no Chrome)
         if: matrix.arch == 'arm64'
         run: |

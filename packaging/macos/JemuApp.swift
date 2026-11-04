@@ -43,6 +43,8 @@ final class PDFRenderer: NSObject, WKNavigationDelegate {
         entry = URL(fileURLWithPath: arguments[6]); root = URL(fileURLWithPath: arguments[7])
     }
 
+    func log(_ message: String) { FileHandle.standardError.write(("jemu-render: " + message + "\n").data(using: .utf8)!) }
+
     func fail(_ message: String) -> Never {
         FileHandle.standardError.write((message + "\n").data(using: .utf8)!)
         exit(1)
@@ -72,13 +74,17 @@ final class PDFRenderer: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fail("load failed: \(error)") }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        log("loaded")
+        // Wait for fonts and images, at most 5 s. No requestAnimationFrame: a never-shown view gets no frames.
         let ready = """
-        await document.fonts.ready;
-        await Promise.all([...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const loaded = Promise.all([document.fonts.ready, ...[...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))]);
+        await Promise.race([loaded, new Promise(r => setTimeout(r, 5000))]);
         return 1;
         """
-        webView.callAsyncJavaScript(ready, arguments: [:], in: nil, in: .defaultClient) { _ in self.capture(from: 0, into: nil) }
+        var started = false
+        let begin = { if !started { started = true; self.log("capturing"); self.capture(from: 0, into: nil) } }
+        webView.callAsyncJavaScript(ready, arguments: [:], in: nil, in: .defaultClient) { _ in begin() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { begin() }
     }
 
     // Captures at most ~10,000 px per PDF call, then slices each capture into exact W×H pages.
@@ -90,7 +96,7 @@ final class PDFRenderer: NSObject, WKNavigationDelegate {
             context = made
         }
         guard let ctx = context else { return }
-        if first >= pages { ctx.closePDF(); exit(0) }
+        if first >= pages { ctx.closePDF(); log("done"); exit(0) }
         let count = min(pages - first, max(1, Int(10000 / height)))
         let config = WKPDFConfiguration()
         config.rect = CGRect(x: 0, y: CGFloat(first) * height, width: width, height: CGFloat(count) * height)
